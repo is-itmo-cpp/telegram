@@ -1,0 +1,11 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.env
+.env.local
+credentials.json
+*.egg-info
+.ruff_cache
+.pytest_cache

@@ -1,0 +1,224 @@
+from textwrap import dedent
+
+from aiogram import Router
+from aiogram.filters import Command
+from aiogram.filters.callback_data import CallbackData
+from aiogram.fsm.context import FSMContext
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
+
+from itmogus.core.storage import Storage
+from itmogus.modules.exam.repository import ExamRepository
+from itmogus.modules.users.auth import HasRole, Role
+from itmogus.modules.users.repository import UserRepository
+from itmogus.sheets.sheet import SheetsClient
+
+
+router = Router()
+
+
+class TaskCallback(CallbackData, prefix="task"):
+    task_id: str
+
+
+async def get_tasks_keyboard(exams: ExamRepository) -> InlineKeyboardMarkup:
+    tasks = await exams.get_all_tasks()
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{task.name} ({task.points})",
+                callback_data=TaskCallback(task_id=task.id).pack(),
+            )
+        ]
+        for task in tasks.values()
+    ]
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.message(Command("give"), HasRole(Role.TEAM))
+async def cmd_give(message: Message, fsm: FSMContext, sheets: SheetsClient, storage: Storage):
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer("Использование: /give <ИСУ>")
+        return
+
+    isu_str = args[1].strip()
+    if not isu_str.isdigit():
+        await message.answer("Неверный формат ИСУ. Использование: /give <ИСУ>")
+        return
+
+    users = UserRepository(sheets)
+    student = await users.get_student_by_isu(int(isu_str))
+    if not student:
+        await message.answer(f"Студент с ИСУ {isu_str} не найден.")
+        return
+
+    exams = ExamRepository(sheets, storage)
+    keyboard = await get_tasks_keyboard(exams)
+    await fsm.update_data(student_isu=student.isu, student_name=student.name)
+    await message.answer(
+        dedent(
+            f"""\
+            ИСУ: {student.isu}
+            Студент: {student.name}
+            Группа: {student.group}
+
+            Выберите задачу:
+            """
+        ).strip(),
+        reply_markup=keyboard,
+    )
+
+
+@router.callback_query(TaskCallback.filter())
+async def callback_select_task(
+    callback: CallbackQuery,
+    callback_data: TaskCallback,
+    fsm: FSMContext,
+    sheets: SheetsClient,
+    storage: Storage,
+):
+    data = await fsm.get_data()
+    student_isu = data.get("student_isu")
+    student_name = data.get("student_name")
+
+    if not student_isu or not student_name:
+        await callback.answer("Ошибка: данные выдачи потеряны")
+        return
+
+    exams = ExamRepository(sheets, storage)
+    all_tasks = await exams.get_all_tasks()
+    task = all_tasks.get(callback_data.task_id)
+    if not task:
+        await callback.answer("Задача не найдена")
+        return
+
+    await exams.log_exam(student_isu, student_name, task.id, task.points)
+
+    delivery_error = False
+    users = UserRepository(sheets)
+    recipient = await users.get_user_by_isu(student_isu)
+    if recipient and callback.bot:
+        try:
+            await callback.bot.send_message(
+                recipient.telegram_id,
+                dedent(
+                    f"""\
+                    Вам выдано задание:
+
+                    ```
+                    {task.text}
+                    ```
+
+                    Желаем удачи!
+                    """
+                ).strip(),
+            )
+        except Exception:
+            delivery_error = True
+
+    if callback.message:
+        text = f'✅ Студенту выдана задача "{task.name}" ({task.points}).'
+        if delivery_error:
+            text += "\n⚠️ Не удалось отправить задачу студенту в Telegram."
+        await callback.message.answer(text)
+
+    await callback.answer()
+    await fsm.clear()
+
+
+@router.callback_query(lambda c: c.data == "cancel")
+async def callback_cancel(callback: CallbackQuery, fsm: FSMContext):
+    if callback.message:
+        await callback.message.answer("Отменено")
+    await callback.answer()
+    await fsm.clear()
+
+
+@router.message(Command("exam_tasks"), HasRole(Role.OWNER))
+async def cmd_exam_tasks(message: Message, sheets: SheetsClient, storage: Storage):
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2:
+        exams = ExamRepository(sheets, storage)
+        tasks_name = await exams.get_tasks_sheet_name()
+        await message.answer(
+            dedent(
+                f"""\
+                Текущий лист билетов: {tasks_name or "не настроен"}
+                Использование: /exam_tasks <url>
+                """
+            ).strip()
+        )
+        return
+
+    exams = ExamRepository(sheets, storage)
+    msg = await exams.set_exam_tasks(args[1].strip())
+    await message.answer(msg)
+
+
+@router.message(Command("exam_logs"), HasRole(Role.OWNER))
+async def cmd_exam_logs(message: Message, sheets: SheetsClient, storage: Storage):
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2:
+        exams = ExamRepository(sheets, storage)
+        logs_name = await exams.get_log_sheet_name()
+        await message.answer(
+            dedent(
+                f"""\
+                Текущий лист сдачи: {logs_name or "не настроен"}
+                Использование: /exam_logs <url>
+                """
+            ).strip()
+        )
+        return
+
+    exams = ExamRepository(sheets, storage)
+    msg = await exams.set_exam_log(args[1].strip())
+    await message.answer(msg)
+
+
+@router.message(Command("exam_status"), HasRole(Role.TEAM))
+async def cmd_exam_status(message: Message, sheets: SheetsClient, storage: Storage):
+    exams = ExamRepository(sheets, storage)
+    status = await exams.get_exam_status()
+    tasks = status.tasks
+    logs = status.logs
+
+    if tasks is None or logs is None:
+        await message.answer("Ошибка: не удалось получить статус.")
+        return
+
+    if tasks.spreadsheet_id and tasks.sheet_name:
+        tasks_link = f"https://docs.google.com/spreadsheets/d/{tasks.spreadsheet_id}/edit"
+        tasks_line = f"- Билеты: [{tasks.sheet_name}]({tasks_link}) ({tasks.count} записей) - {tasks.status}"
+    else:
+        tasks_line = "- Билеты: не настроены"
+
+    if logs.spreadsheet_id and logs.sheet_name:
+        logs_link = f"https://docs.google.com/spreadsheets/d/{logs.spreadsheet_id}/edit"
+        logs_line = f"- Сдача: [{logs.sheet_name}]({logs_link}) ({logs.count} записей) - {logs.status}"
+    else:
+        logs_line = "- Сдача: не настроена"
+
+    await message.answer(
+        dedent(
+            f"""\
+            📊 Конфигурация экзамена:
+            {tasks_line}
+            {logs_line}
+            """
+        ).strip(),
+        parse_mode="Markdown",
+    )
+
+
+@router.message(Command("exam_end"), HasRole(Role.OWNER))
+async def cmd_exam_end(message: Message, sheets: SheetsClient, storage: Storage):
+    exams = ExamRepository(sheets, storage)
+    exams.clear_exam_config()
+    await message.answer("Экзамен завершен. Конфигурация таблиц сброшена.")
