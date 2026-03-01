@@ -1,14 +1,16 @@
 import asyncio
+import logging
 from textwrap import dedent
 
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from itmogus.modules.users.auth import HasRole, Role
 from itmogus.modules.sync.github import run_sync
+from itmogus.modules.users.auth import HasRole, Role
 
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -30,6 +32,8 @@ async def cmd_sync(message: Message):
 
     try:
         total, success, failed = await asyncio.wait_for(run_sync(prefix), timeout=600)
+
+        logger.info("Synced repos with prefix '%s': %d/%d success, %d failed", prefix, success, total, failed)
 
         await status_msg.edit_text(
             dedent(

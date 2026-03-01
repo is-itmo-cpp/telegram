@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from itmogus.core.storage import Storage
@@ -6,6 +7,9 @@ from itmogus.modules.exam.models import ExamLog, ExamSheetStatus, ExamStatus, Ta
 from itmogus.modules.exam.state import ExamState
 from itmogus.sheets import SheetRef, SheetsSchemaError, parse_sheets_url
 from itmogus.sheets.sheet import HeaderModel, Sheet, SheetsClient
+
+
+logger = logging.getLogger(__name__)
 
 
 class ExamRepository:
@@ -63,6 +67,8 @@ class ExamRepository:
             )
         )
 
+        logger.info("Task %s (%s points) assigned to ISU %d", task_id, points, isu)
+
     async def set_exam_tasks(self, url: str) -> str:
         parsed = parse_sheets_url(url)
         if not parsed:
@@ -82,6 +88,8 @@ class ExamRepository:
         state.tasks = SheetRef(spreadsheet_id=spreadsheet_id, sheet_name=sheet.name)
         self._state.save("exam")
         self._client.invalidate_all_sheets()
+
+        logger.info("Exam tasks sheet set to '%s'", sheet.name)
         return f"Таблица билетов установлена на лист '{sheet.name}'"
 
     async def set_exam_log(self, url: str) -> str:
@@ -103,6 +111,8 @@ class ExamRepository:
         state.log = SheetRef(spreadsheet_id=spreadsheet_id, sheet_name=sheet.name)
         self._state.save("exam")
         self._client.invalidate_all_sheets()
+
+        logger.info("Exam log sheet set to '%s'", sheet.name)
         return f"Таблица лога установлена на лист '{sheet.name}'"
 
     async def _sheet_status(self, ref: SheetRef, model_cls: type[HeaderModel]) -> ExamSheetStatus:
@@ -136,3 +146,5 @@ class ExamRepository:
         state.log = SheetRef()
         self._state.save("exam")
         self._client.invalidate_all_sheets()
+
+        logger.info("Exam config cleared")

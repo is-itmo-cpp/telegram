@@ -1,3 +1,5 @@
+import logging
+
 from itmogus.core.config import config
 from itmogus.modules.users.errors import (
     IsuAlreadyBoundError,
@@ -7,6 +9,8 @@ from itmogus.modules.users.errors import (
 from itmogus.modules.users.models import BotUser, Student, TeamMember
 from itmogus.sheets import Sheet, SheetsClient
 
+
+logger = logging.getLogger(__name__)
 
 STUDENTS_SHEET = "Students"
 BOT_USERS_SHEET = "Users"
@@ -65,6 +69,8 @@ class UserRepository:
             raise NoSuchIsuError()
 
         await self._bot_users_sheet().append_model(BotUser(isu=isu, telegram_id=tg_id))
+
+        logger.info("User %d registered as ISU %d (%s)", tg_id, isu, student.name)
 
         return student
 
