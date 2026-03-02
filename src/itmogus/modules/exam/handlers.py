@@ -41,7 +41,7 @@ async def get_tasks_keyboard(exams: ExamRepository) -> InlineKeyboardMarkup:
 
 
 @router.message(Command("give"), HasRole(Role.TEAM))
-async def cmd_give(message: Message, fsm: FSMContext, sheets: SheetsClient, storage: Storage):
+async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, storage: Storage):
     args = (message.text or "").split(maxsplit=1)
     if len(args) < 2:
         await message.answer("Использование: /give <ИСУ>")
@@ -60,7 +60,7 @@ async def cmd_give(message: Message, fsm: FSMContext, sheets: SheetsClient, stor
 
     exams = ExamRepository(sheets, storage)
     keyboard = await get_tasks_keyboard(exams)
-    await fsm.update_data(student_isu=student.isu, student_name=student.name)
+    await state.update_data(student_isu=student.isu, student_name=student.name)
     await message.answer(
         dedent(
             f"""\
@@ -79,11 +79,11 @@ async def cmd_give(message: Message, fsm: FSMContext, sheets: SheetsClient, stor
 async def callback_select_task(
     callback: CallbackQuery,
     callback_data: TaskCallback,
-    fsm: FSMContext,
+    state: FSMContext,
     sheets: SheetsClient,
     storage: Storage,
 ):
-    data = await fsm.get_data()
+    data = await state.get_data()
     student_isu = data.get("student_isu")
     student_name = data.get("student_name")
 
@@ -129,15 +129,15 @@ async def callback_select_task(
         await callback.message.answer(text)
 
     await callback.answer()
-    await fsm.clear()
+    await state.clear()
 
 
 @router.callback_query(lambda c: c.data == "cancel")
-async def callback_cancel(callback: CallbackQuery, fsm: FSMContext):
+async def callback_cancel(callback: CallbackQuery, state: FSMContext):
     if callback.message:
         await callback.message.answer("Отменено")
     await callback.answer()
-    await fsm.clear()
+    await state.clear()
 
 
 @router.message(Command("exam_tasks"), HasRole(Role.OWNER))
