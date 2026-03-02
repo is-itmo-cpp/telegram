@@ -4,6 +4,7 @@ from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from itmogus.app.middleware import ErrorMiddleware
 from itmogus.core.config import config
@@ -17,6 +18,27 @@ from itmogus.sheets.sheet import SheetsClient
 
 
 logger = logging.getLogger(__name__)
+
+
+async def register_commands(bot: Bot) -> None:
+    commands = [
+        BotCommand(command="start", description="Справка по командам"),
+        BotCommand(command="register", description="Регистрация по ИСУ"),
+        BotCommand(command="who", description="Информация о пользователе"),
+
+        BotCommand(command="give", description="Выдать задачу студенту"),
+        BotCommand(command="exam", description="Статус экзамена"),
+        BotCommand(command="exam_tasks", description="Настроить таблицу билетов"),
+        BotCommand(command="exam_logs", description="Настроить таблицу сдачи"),
+        BotCommand(command="exam_end", description="Завершить экзамен"),
+
+        BotCommand(command="sync", description="Синхронизация репозиториев"),
+
+        BotCommand(command="status", description="Просмотр конфигурации"),
+        BotCommand(command="log", description="Просмотр логов"),
+        BotCommand(command="reload", description="Сброс кэша"),
+    ]
+    await bot.set_my_commands(commands)
 
 
 async def main():
@@ -40,6 +62,8 @@ async def main():
     dp.include_router(exam_router)
     dp.include_router(sync_router)
     dp.include_router(admin_router)
+
+    await register_commands(bot)
 
     logger.info("Bot started")
 

@@ -18,7 +18,7 @@ router = Router()
 async def cmd_sync(message: Message):
     args = (message.text or "").split(maxsplit=1)
     if len(args) < 2 or not args[1].strip():
-        await message.answer("Использование: /sync <prefix>, например /sync labwork6")
+        await message.answer("📝 Использование: /sync <prefix>\n\nПример: /sync labwork6")
         return
 
     prefix = args[1].strip()
@@ -26,7 +26,7 @@ async def cmd_sync(message: Message):
         prefix += "-"
 
     status_msg = await message.answer(
-        f"Синхронизирую репозитории с префиксом `{prefix}`...",
+        f"🔄 Синхронизирую репозитории с префиксом `{prefix}`...",
         parse_mode="Markdown",
     )
 
@@ -38,15 +38,16 @@ async def cmd_sync(message: Message):
         await status_msg.edit_text(
             dedent(
                 f"""\
-                Синхронизация завершена!
-                Префикс: {prefix}
-                Всего репозиториев: {total}
-                Успешно: {success}
-                Ошибки: {failed}
+                ✅ Синхронизация завершена
+
+                📂 Префикс: {prefix}
+                📊 Всего: {total}
+                ✅ Успешно: {success}
+                ❌ Ошибки: {failed}
                 """
             ).strip()
         )
     except asyncio.TimeoutError:
-        await status_msg.edit_text("Синхронизация превысила таймаут (10 минут)")
+        await status_msg.edit_text("⏱ Синхронизация превысила таймаут (10 минут)")
     except Exception as e:
-        await status_msg.edit_text(f"Ошибка: {e}")
+        await status_msg.edit_text(f"❌ Ошибка: {e}")

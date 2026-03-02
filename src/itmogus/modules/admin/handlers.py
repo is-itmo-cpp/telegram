@@ -4,7 +4,7 @@ from textwrap import dedent
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import LinkPreviewOptions, Message
 
 from itmogus.core.config import config
 from itmogus.modules.users.auth import HasRole, Role
@@ -62,7 +62,7 @@ def format_log_entry(log: dict) -> str:
     return " ".join(parts)
 
 
-@router.message(Command("log"), HasRole(Role.OWNER))
+@router.message(Command("logs"), HasRole(Role.OWNER))
 async def cmd_log(message: Message):
     args = (message.text or "").split()[1:]
 
@@ -72,15 +72,15 @@ async def cmd_log(message: Message):
                 """\
                 📋 **Log viewer**
 
-                Usage: `/log [criteria] [count]`
+                Usage: `/logs [criteria] [count]`
 
                 **Examples:**
-                `/log` - Last 20 logs
-                `/log 50` - Last 50 logs
-                `/log error` - Last 20 errors
-                `/log warning 30` - Last 30 warnings
-                `/log user:123456` - Last 20 logs from user 123456
-                `/log event:abc123` - Last 20 logs with event ID abc123
+                `/logs` - Last 20 logs
+                `/logs 50` - Last 50 logs
+                `/logs error` - Last 20 errors
+                `/logs warning 30` - Last 30 warnings
+                `/logs user:123456` - Last 20 logs from user 123456
+                `/logs event:abc123` - Last 20 logs with event ID abc123
 
                 **Levels:** error, warning, info, debug
                 **Max count:** 100
@@ -116,24 +116,17 @@ async def cmd_log(message: Message):
     formatted = [format_log_entry(log) for log in logs]
     text = "\n".join(formatted)
 
-    if len(text) > 4000:
-        text = text[:4000] + "\n... (truncated)"
-
     await message.answer(f"```\n{text}\n```", parse_mode="Markdown")
 
 
 @router.message(Command("reload"), HasRole(Role.OWNER))
 async def cmd_reload(message: Message, sheets: SheetsClient):
     sheets.invalidate_all_sheets()
-    await message.answer("Кэш сброшен.")
+    await message.answer("✅ Кэш сброшен.")
 
 
 @router.message(Command("status"), HasRole(Role.OWNER))
 async def cmd_status(message: Message, sheets: SheetsClient):
-    if not config.users_table_id:
-        await message.answer("Users table не настроена.")
-        return
-
     async def _link(sheet_name: str) -> str:
         gid = await sheets.resolve_sheet_gid(config.users_table_id, sheet_name)
         url = f"https://docs.google.com/spreadsheets/d/{config.users_table_id}/edit#gid={gid}"
@@ -155,4 +148,5 @@ async def cmd_status(message: Message, sheets: SheetsClient):
             """
         ).strip(),
         parse_mode="Markdown",
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )

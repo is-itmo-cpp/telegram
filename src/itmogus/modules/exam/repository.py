@@ -46,7 +46,7 @@ class ExamRepository:
         tasks = await sheet.read_models(Task)
         return {task.id: task for task in tasks if task.id}
 
-    async def log_exam(self, isu: int, name: str, task_id: str | None, points: str) -> None:
+    async def log_exam(self, isu: int, name: str, task_comment: str | None, points: str) -> None:
         sheet = await self._get_sheet(self._exam_state().log)
         if sheet is None:
             return
@@ -63,11 +63,11 @@ class ExamRepository:
                 points_max=points,
                 points_total="",
                 checker="",
-                comment=task_id or "",
+                comment=task_comment or "",
             )
         )
 
-        logger.info("Task %s (%s points) assigned to ISU %d", task_id, points, isu)
+        logger.info("Task %s (%s points) assigned to ISU %d", task_comment, points, isu)
 
     async def set_exam_tasks(self, url: str) -> str:
         parsed = parse_sheets_url(url)
@@ -113,7 +113,7 @@ class ExamRepository:
         self._client.invalidate_all_sheets()
 
         logger.info("Exam log sheet set to '%s'", sheet.name)
-        return f"Таблица лога установлена на лист '{sheet.name}'"
+        return f"Таблица сдачи установлена на лист '{sheet.name}'"
 
     async def _sheet_status(self, ref: SheetRef, model_cls: type[HeaderModel]) -> ExamSheetStatus:
         sheet = await self._get_sheet(ref)

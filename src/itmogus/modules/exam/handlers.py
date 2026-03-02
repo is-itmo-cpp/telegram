@@ -1,4 +1,6 @@
+from datetime import datetime
 from textwrap import dedent
+from typing import TypeGuard
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -8,6 +10,7 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    LinkPreviewOptions,
     Message,
 )
 
@@ -23,6 +26,10 @@ router = Router()
 
 class TaskCallback(CallbackData, prefix="task"):
     task_id: str
+
+
+def is_accessible_message(msg) -> TypeGuard[Message]:
+    return isinstance(msg, Message)
 
 
 async def get_tasks_keyboard(exams: ExamRepository) -> InlineKeyboardMarkup:
@@ -44,18 +51,18 @@ async def get_tasks_keyboard(exams: ExamRepository) -> InlineKeyboardMarkup:
 async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, storage: Storage):
     args = (message.text or "").split(maxsplit=1)
     if len(args) < 2:
-        await message.answer("Использование: /give <ИСУ>")
+        await message.answer("📝 Использование: /give <ИСУ>")
         return
 
     isu_str = args[1].strip()
     if not isu_str.isdigit():
-        await message.answer("Неверный формат ИСУ. Использование: /give <ИСУ>")
+        await message.answer("❌ Неверный формат ИСУ.\n\n📝 Использование: /give <ИСУ>")
         return
 
     users = UserRepository(sheets)
     student = await users.get_student_by_isu(int(isu_str))
     if not student:
-        await message.answer(f"Студент с ИСУ {isu_str} не найден.")
+        await message.answer(f"❌ Студент с ИСУ {isu_str} не найден.")
         return
 
     exams = ExamRepository(sheets, storage)
@@ -64,9 +71,11 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
     await message.answer(
         dedent(
             f"""\
-            ИСУ: {student.isu}
-            Студент: {student.name}
-            Группа: {student.group}
+            🎓 Студент найден
+
+            👤 {student.name}
+            🆔 ИСУ: {student.isu}
+            📚 Группа: {student.group}
 
             Выберите задачу:
             """
@@ -98,7 +107,10 @@ async def callback_select_task(
         await callback.answer("Задача не найдена")
         return
 
-    await exams.log_exam(student_isu, student_name, task.id, task.points)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    task_comment = f'Выдана задача: "{task.name}"'
+    await exams.log_exam(student_isu, student_name, task_comment, task.points)
 
     delivery_error = False
     users = UserRepository(sheets)
@@ -107,26 +119,27 @@ async def callback_select_task(
         try:
             await callback.bot.send_message(
                 recipient.telegram_id,
-                dedent(
-                    f"""\
-                    Вам выдано задание:
-
-                    ```
-                    {task.text}
-                    ```
-
-                    Желаем удачи!
-                    """
-                ).strip(),
+                f"Вам выдано задание:\n\n```cpp\n{task.text}\n```\nЖелаем удачи!",
+                parse_mode="Markdown",
             )
         except Exception:
             delivery_error = True
 
-    if callback.message:
-        text = f'✅ Студенту выдана задача "{task.name}" ({task.points}).'
+    if is_accessible_message(callback.message):
+        text = dedent(
+            f"""\
+            ✅ Студенту выдана задача
+
+            👤 Студент: {student_name}
+            🆔 ИСУ: {student_isu}
+            📋 Задача: {task.name}
+            💯 Баллы: {task.points}
+            🕐 Время: {timestamp}
+            """
+        ).strip()
         if delivery_error:
-            text += "\n⚠️ Не удалось отправить задачу студенту в Telegram."
-        await callback.message.answer(text)
+            text += "\n\n⚠️ Не удалось отправить задачу студенту в Telegram."
+        await callback.message.edit_text(text)
 
     await callback.answer()
     await state.clear()
@@ -134,8 +147,8 @@ async def callback_select_task(
 
 @router.callback_query(lambda c: c.data == "cancel")
 async def callback_cancel(callback: CallbackQuery, state: FSMContext):
-    if callback.message:
-        await callback.message.answer("Отменено")
+    if is_accessible_message(callback.message):
+        await callback.message.edit_text("❌ Отменено")
     await callback.answer()
     await state.clear()
 
@@ -149,8 +162,9 @@ async def cmd_exam_tasks(message: Message, sheets: SheetsClient, storage: Storag
         await message.answer(
             dedent(
                 f"""\
-                Текущий лист билетов: {tasks_name or "не настроен"}
-                Использование: /exam_tasks <url>
+                📋 Текущий лист билетов: {tasks_name or "не настроен"}
+
+                📝 Использование: /exam_tasks <url>
                 """
             ).strip()
         )
@@ -170,8 +184,9 @@ async def cmd_exam_logs(message: Message, sheets: SheetsClient, storage: Storage
         await message.answer(
             dedent(
                 f"""\
-                Текущий лист сдачи: {logs_name or "не настроен"}
-                Использование: /exam_logs <url>
+                📝 Текущий лист сдачи: {logs_name or "не настроен"}
+
+                📝 Использование: /exam_logs <url>
                 """
             ).strip()
         )
@@ -182,7 +197,7 @@ async def cmd_exam_logs(message: Message, sheets: SheetsClient, storage: Storage
     await message.answer(msg)
 
 
-@router.message(Command("exam_status"), HasRole(Role.TEAM))
+@router.message(Command("exam"), HasRole(Role.TEAM))
 async def cmd_exam_status(message: Message, sheets: SheetsClient, storage: Storage):
     exams = ExamRepository(sheets, storage)
     status = await exams.get_exam_status()
@@ -190,7 +205,7 @@ async def cmd_exam_status(message: Message, sheets: SheetsClient, storage: Stora
     logs = status.logs
 
     if tasks is None or logs is None:
-        await message.answer("Ошибка: не удалось получить статус.")
+        await message.answer("❌ Ошибка: не удалось получить статус.")
         return
 
     if tasks.spreadsheet_id and tasks.sheet_name:
@@ -214,6 +229,7 @@ async def cmd_exam_status(message: Message, sheets: SheetsClient, storage: Stora
             """
         ).strip(),
         parse_mode="Markdown",
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
 
 
@@ -221,4 +237,4 @@ async def cmd_exam_status(message: Message, sheets: SheetsClient, storage: Stora
 async def cmd_exam_end(message: Message, sheets: SheetsClient, storage: Storage):
     exams = ExamRepository(sheets, storage)
     exams.clear_exam_config()
-    await message.answer("Экзамен завершен. Конфигурация таблиц сброшена.")
+    await message.answer("✅ Экзамен завершен. Конфигурация таблиц сброшена.")
