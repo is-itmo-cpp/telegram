@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from textwrap import dedent
 
 from aiogram import Router
@@ -10,6 +12,114 @@ from itmogus.sheets.sheet import SheetsClient
 
 
 router = Router()
+
+LOGS_DIR = Path("logs")
+
+
+# Just reads the entire 10MB file. That'll do ¯\(ツ)/¯
+def read_logs(limit: int, criteria: tuple[str, str | int] | None = None) -> list[dict]:
+    log_file = LOGS_DIR / "itmogus.log"
+    if not log_file.exists():
+        return []
+
+    logs = []
+    with open(log_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                log_entry = json.loads(line)
+                if criteria:
+                    key, value = criteria
+                    log_value = log_entry.get(key)
+                    if key == "event_id":
+                        if not isinstance(log_value, str) or not log_value.startswith(str(value)):
+                            continue
+                    elif log_value != value:
+                        continue
+                logs.append(log_entry)
+            except json.JSONDecodeError:
+                continue
+
+    return logs[-limit:]
+
+
+def format_log_entry(log: dict) -> str:
+    timestamp = log.get("timestamp", "?")
+    level = log.get("level", "?")
+    message = log.get("message", "?")
+    event_id = log.get("event_id", "")
+    user_id = log.get("user_id", "")
+
+    parts = [f"[{timestamp}]", f"[{level}]"]
+    if event_id:
+        parts.append(f"[{event_id[:8]}]")
+    if user_id:
+        parts.append(f"[user:{user_id}]")
+    parts.append(message)
+
+    return " ".join(parts)
+
+
+@router.message(Command("log"), HasRole(Role.OWNER))
+async def cmd_log(message: Message):
+    args = (message.text or "").split()[1:]
+
+    if not args or args[0] == "help":
+        await message.answer(
+            dedent(
+                """\
+                📋 **Log viewer**
+
+                Usage: `/log [criteria] [count]`
+
+                **Examples:**
+                `/log` - Last 20 logs
+                `/log 50` - Last 50 logs
+                `/log error` - Last 20 errors
+                `/log warning 30` - Last 30 warnings
+                `/log user:123456` - Last 20 logs from user 123456
+                `/log event:abc123` - Last 20 logs with event ID abc123
+
+                **Levels:** error, warning, info, debug
+                **Max count:** 100
+                """
+            ).strip(),
+            parse_mode="Markdown",
+        )
+        return
+
+    criteria = None
+    count = 20
+
+    for arg in args:
+        if arg.isdigit():
+            count = min(int(arg), 100)
+        elif arg in ("error", "warning", "info", "debug"):
+            criteria = ("level", arg.upper())
+        elif arg.startswith("user:"):
+            try:
+                criteria = ("user_id", int(arg.split(":")[1]))
+            except (ValueError, IndexError):
+                await message.answer(f"Invalid user ID: {arg}")
+                return
+        elif arg.startswith("event:"):
+            criteria = ("event_id", arg.split(":", 1)[1])
+
+    logs = read_logs(count, criteria)
+
+    if not logs:
+        await message.answer("No logs found.")
+        return
+
+    formatted = [format_log_entry(log) for log in logs]
+    text = "\n".join(formatted)
+
+    if len(text) > 4000:
+        text = text[:4000] + "\n... (truncated)"
+
+    await message.answer(f"```\n{text}\n```", parse_mode="Markdown")
 
 
 @router.message(Command("reload"), HasRole(Role.OWNER))
