@@ -35,7 +35,7 @@ async def register_commands(bot: Bot) -> None:
         BotCommand(command="sync", description="Синхронизация репозиториев"),
 
         BotCommand(command="status", description="Просмотр конфигурации"),
-        BotCommand(command="log", description="Просмотр логов"),
+        BotCommand(command="logs", description="Просмотр логов"),
         BotCommand(command="reload", description="Сброс кэша"),
     ]
     await bot.set_my_commands(commands)
