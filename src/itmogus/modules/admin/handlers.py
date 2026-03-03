@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from textwrap import dedent
 
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import LinkPreviewOptions, Message
 
@@ -62,7 +62,7 @@ def format_log_entry(log: dict) -> str:
     return " ".join(parts)
 
 
-@router.message(Command("logs"), HasRole(Role.OWNER))
+@router.message(Command("logs"), HasRole(Role.OWNER), F.chat.type == "private")
 async def cmd_log(message: Message):
     args = (message.text or "").split()[1:]
 
@@ -125,7 +125,7 @@ async def cmd_reload(message: Message, sheets: SheetsClient):
     await message.answer("✅ Кэш сброшен.")
 
 
-@router.message(Command("status"), HasRole(Role.OWNER))
+@router.message(Command("status"), HasRole(Role.OWNER), F.chat.type == "private")
 async def cmd_status(message: Message, sheets: SheetsClient):
     async def _link(sheet_name: str) -> str:
         gid = await sheets.resolve_sheet_gid(config.users_table_id, sheet_name)
