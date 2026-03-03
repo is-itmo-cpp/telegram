@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -12,6 +13,16 @@ from aiogram.types import CallbackQuery, Message
 
 current_user_id: ContextVar[int | None] = ContextVar("current_user_id", default=None)
 current_event_id: ContextVar[str | None] = ContextVar("current_event_id", default=None)
+
+
+RE_AIOGRAM_UNHANDLED = re.compile(r"^Update id=\d+ is not handled\.")
+
+
+class AiogramNotHandledFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == "aiogram.event" and RE_AIOGRAM_UNHANDLED.match(record.getMessage()):
+            return False
+        return True
 
 
 def generate_event_id() -> str:
@@ -72,6 +83,7 @@ def setup_logging(log_dir: Path = Path("logs")) -> None:
     root_logger.setLevel(logging.INFO)
 
     context_filter = ContextFilter()
+    aiogram_filter = AiogramNotHandledFilter()
 
     file_handler = RotatingFileHandler(
         log_dir / "itmogus.log",
@@ -82,11 +94,13 @@ def setup_logging(log_dir: Path = Path("logs")) -> None:
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(JSONFormatter())
     file_handler.addFilter(context_filter)
+    file_handler.addFilter(aiogram_filter)
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(JSONFormatter())
     console_handler.addFilter(context_filter)
+    console_handler.addFilter(aiogram_filter)
 
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
