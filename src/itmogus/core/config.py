@@ -17,6 +17,7 @@ class Config(BaseSettings):
     github_org: str = ""
     github_branch: str = "main"
     storage_dir: str = "state"
+    log_dir: str = "logs"
 
     @field_validator("owner_ids", mode="before")
     @classmethod

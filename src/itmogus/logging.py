@@ -76,7 +76,7 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data, ensure_ascii=False)
 
 
-def setup_logging(log_dir: Path = Path("logs")) -> None:
+def setup_logging(log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     root_logger = logging.getLogger()

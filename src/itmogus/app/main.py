@@ -25,15 +25,12 @@ async def register_commands(bot: Bot) -> None:
         BotCommand(command="start", description="Справка по командам"),
         BotCommand(command="register", description="Регистрация по ИСУ"),
         BotCommand(command="who", description="Информация о пользователе"),
-
         BotCommand(command="give", description="Выдать задачу студенту"),
         BotCommand(command="exam", description="Статус экзамена"),
         BotCommand(command="exam_tasks", description="Настроить таблицу билетов"),
         BotCommand(command="exam_logs", description="Настроить таблицу сдачи"),
         BotCommand(command="exam_end", description="Завершить экзамен"),
-
         BotCommand(command="sync", description="Синхронизация репозиториев"),
-
         BotCommand(command="status", description="Просмотр конфигурации"),
         BotCommand(command="logs", description="Просмотр логов"),
         BotCommand(command="reload", description="Сброс кэша"),
@@ -42,7 +39,7 @@ async def register_commands(bot: Bot) -> None:
 
 
 async def main():
-    setup_logging()
+    setup_logging(Path(config.log_dir))
 
     sheets_client = await SheetsClient.create(config.google_credentials_path)
     state = Storage(Path(config.storage_dir))
