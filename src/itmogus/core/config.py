@@ -1,5 +1,17 @@
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated, Any
+from pydantic import BeforeValidator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def parse_owner_ids(value: Any) -> set[int]:
+    if not value:
+        return set()
+    if isinstance(value, str):
+        return {int(x.strip()) for x in value.split(",") if x.strip()}
+    return value
+
+
+OwnerIds = Annotated[set[int], NoDecode, BeforeValidator(parse_owner_ids)]
 
 
 class Config(BaseSettings):
@@ -10,7 +22,7 @@ class Config(BaseSettings):
     )
 
     bot_token: str
-    owner_ids: set[int] = set()
+    owner_ids: OwnerIds = set()
     google_credentials_path: str = "credentials.json"
     users_table_id: str = ""
     github_token: str = ""
@@ -18,19 +30,6 @@ class Config(BaseSettings):
     github_branch: str = "main"
     storage_dir: str = "state"
     log_dir: str = "logs"
-
-    @field_validator("owner_ids", mode="before")
-    @classmethod
-    def parse_owner_ids(cls, v: str | set[int] | int) -> set[int]:
-        if isinstance(v, set):
-            return v
-        if isinstance(v, int):
-            return {v}
-        if isinstance(v, str):
-            if not v.strip():
-                return set()
-            return {int(x.strip()) for x in v.split(",") if x.strip().isdigit()}
-        return set()
 
 
 config = Config()  # type: ignore[missing-argument]
