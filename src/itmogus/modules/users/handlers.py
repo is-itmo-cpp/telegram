@@ -1,8 +1,10 @@
 from textwrap import dedent
+from typing import TypeGuard
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, User
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 
 from itmogus.modules.users.auth import Role, get_role, is_owner
 from itmogus.modules.users.repository import UserRepository
@@ -10,6 +12,15 @@ from itmogus.sheets.sheet import SheetsClient
 
 
 router = Router()
+
+
+class RegisterCallback(CallbackData, prefix="register"):
+    isu: int
+    confirm: bool
+
+
+def is_accessible_message(msg) -> TypeGuard[Message]:
+    return isinstance(msg, Message)
 
 
 async def _format_user_info(user: User, users: UserRepository) -> str:
@@ -61,7 +72,7 @@ async def cmd_start(message: Message, sheets: SheetsClient):
 
 @router.message(Command("register"), F.chat.type == "private")
 async def cmd_register(message: Message, sheets: SheetsClient):
-    if (user := message.from_user) is None:
+    if message.from_user is None:
         return
 
     parts = (message.text or "").split(maxsplit=1)
@@ -76,8 +87,59 @@ async def cmd_register(message: Message, sheets: SheetsClient):
 
     isu = int(isu_str)
     users = UserRepository(sheets)
-    student = await users.register_user(user.id, isu)
-    await message.answer(f"✅ Вы успешно зарегистрированы, {student.name}!")
+
+    existing = await users.get_user_by_telegram_id(message.from_user.id)
+    if existing is not None:
+        student = await users.get_student_by_isu(existing.isu)
+        name = student.name if student else f"ИСУ {existing.isu}"
+        await message.answer(f"❌ Вы уже зарегистрированы как {name}.")
+        return
+
+    student = await users.get_student_by_isu(isu)
+    if student is None:
+        await message.answer("❌ Студент с таким ИСУ не найден.")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅",
+                    callback_data=RegisterCallback(isu=isu, confirm=True).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="❌",
+                    callback_data=RegisterCallback(isu=isu, confirm=False).pack(),
+                ),
+            ]
+        ]
+    )
+    await message.answer(
+        f"Вы хотите зарегистрироваться как {student.name} ({student.group})?",
+        reply_markup=keyboard,
+    )
+
+
+@router.callback_query(RegisterCallback.filter())
+async def callback_register(
+    callback: CallbackQuery,
+    callback_data: RegisterCallback,
+    sheets: SheetsClient,
+):
+    if callback.from_user is None:
+        return
+
+    if not callback_data.confirm:
+        if is_accessible_message(callback.message):
+            await callback.message.edit_text("❌ Регистрация отменена.")
+        await callback.answer()
+        return
+
+    users = UserRepository(sheets)
+    student = await users.register_user(callback.from_user.id, callback_data.isu)
+    if is_accessible_message(callback.message):
+        await callback.message.edit_text(f"✅ Вы успешно зарегистрированы, {student.name}!")
+    await callback.answer()
 
 
 @router.message(Command("who"))
