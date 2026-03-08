@@ -46,7 +46,7 @@ class ExamRepository:
         tasks = await sheet.read_models(Task)
         return {task.id: task for task in tasks if task.id}
 
-    async def log_exam(self, isu: int, group: str, name: str, task_comment: str | None, points: str) -> None:
+    async def log_exam(self, isu: int, group: str, name: str, task_id: str, points: str) -> None:
         sheet = await self._get_sheet(self._exam_state().log)
         if sheet is None:
             return
@@ -60,14 +60,15 @@ class ExamRepository:
                 name=name,
                 started_at=timestamp,
                 elapsed="",
+                task_id=task_id,
                 points_max=points,
                 points_total="",
                 checker="",
-                comment=task_comment or "",
+                comment="",
             )
         )
 
-        logger.info("Task %s (%s points) assigned to ISU %d", task_comment, points, isu)
+        logger.info("Task %s (%s points) assigned to ISU %d", task_id, points, isu)
 
     async def set_exam_tasks(self, url: str) -> str:
         parsed = parse_sheets_url(url)

@@ -110,8 +110,7 @@ async def callback_select_task(
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    task_comment = f'Выдана задача: "{task.name}"'
-    await exams.log_exam(student_isu, student_group, student_name, task_comment, task.points)
+    await exams.log_exam(student_isu, student_group, student_name, task.id, task.points)
 
     delivery_error = False
     users = UserRepository(sheets)

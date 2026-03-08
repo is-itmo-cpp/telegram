@@ -7,7 +7,7 @@ from itmogus.sheets import cell
 @dataclass
 class Task:
     _headers: ClassVar[list[list[str]]] = [
-        ["№ Задания", "Название", "Баллы", "Текст задания", "Комментарии для принимающих"],
+        ["№", "Название", "Баллы", "Текст задания", "Комментарии для принимающих"],
     ]
 
     id: str
@@ -34,8 +34,8 @@ class Task:
 @dataclass
 class ExamLog:
     _headers: ClassVar[list[list[str]]] = [
-        ["Студент", "", "", "Время", "", "Балл", "", "Проверяющий", "Комментарий"],
-        ["ИСУ", "Группа", "ФИО", "Начало", "Прошло", "Макс", "Итог", "", ""],
+        ["Студент", "", "", "Время", "", "Задание", "", "", "Проверяющий", "Комментарий"],
+        ["ИСУ", "Группа", "ФИО", "Начало", "Прошло", "№", "Max", "Итог", "", ""],
     ]
 
     isu: int
@@ -43,6 +43,7 @@ class ExamLog:
     name: str
     started_at: str
     elapsed: str
+    task_id: str
     points_max: str
     points_total: str
     checker: str
@@ -55,6 +56,7 @@ class ExamLog:
             self.name,
             self.started_at,
             self.elapsed,
+            self.task_id,
             self.points_max,
             self.points_total,
             self.checker,
