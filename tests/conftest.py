@@ -2,7 +2,10 @@ import os
 from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 
+
+load_dotenv()
 
 os.environ.setdefault("BOT_TOKEN", "test-bot-token")
 os.environ.setdefault("OWNER_IDS", "1")
