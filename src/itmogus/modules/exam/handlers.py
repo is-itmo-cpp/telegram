@@ -67,7 +67,7 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
 
     exams = ExamRepository(sheets, storage)
     keyboard = await get_tasks_keyboard(exams)
-    await state.update_data(student_isu=student.isu, student_name=student.name)
+    await state.update_data(student_isu=student.isu, student_name=student.name, student_group=student.group)
     await message.answer(
         dedent(
             f"""\
@@ -95,6 +95,7 @@ async def callback_select_task(
     data = await state.get_data()
     student_isu = data.get("student_isu")
     student_name = data.get("student_name")
+    student_group = data.get("student_group", "")
 
     if not student_isu or not student_name:
         await callback.answer("Ошибка: данные выдачи потеряны")
@@ -110,7 +111,7 @@ async def callback_select_task(
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     task_comment = f'Выдана задача: "{task.name}"'
-    await exams.log_exam(student_isu, student_name, task_comment, task.points)
+    await exams.log_exam(student_isu, student_group, student_name, task_comment, task.points)
 
     delivery_error = False
     users = UserRepository(sheets)
