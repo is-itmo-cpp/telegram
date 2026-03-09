@@ -8,27 +8,27 @@ class SheetsError(BotError):
 
 
 class SheetsConnectionError(SheetsError):
-    pass
+    user_message = "Ошибка подключения к Google. Попробуйте позже."
 
 
 class SheetsRateLimitError(SheetsError):
-    pass
+    user_message = "Слишком много запросов. Попробуйте позже."
 
 
 class SheetsAuthError(SheetsError):
-    pass
+    user_message = "Нет доступа к таблице. Обратитесь к администратору."
 
 
 class SheetNotFoundError(SheetsError):
-    pass
+    user_message = "Таблица или лист не найден."
 
 
 class SheetsAPIError(SheetsError):
-    pass
+    user_message = "Ошибка API Google."
 
 
 class SheetsSchemaError(SheetsError):
-    pass
+    user_message = "Неверная структура листа."
 
 
 def map_http_error(error: Exception) -> SheetsError:

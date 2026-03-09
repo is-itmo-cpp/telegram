@@ -6,12 +6,12 @@ class UsersError(BotError):
 
 
 class TelegramAlreadyBoundError(UsersError):
-    pass
+    user_message = "Этот Telegram уже привязан к другому ИСУ."
 
 
 class IsuAlreadyBoundError(UsersError):
-    pass
+    user_message = "Этот ИСУ уже привязан к другому Telegram."
 
 
 class NoSuchIsuError(UsersError):
-    pass
+    user_message = "Студент с таким ИСУ не найден."

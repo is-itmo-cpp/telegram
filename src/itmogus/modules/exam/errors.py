@@ -6,8 +6,8 @@ class ExamError(BotError):
 
 
 class ExamConfigError(ExamError):
-    pass
+    user_message = "Ошибка конфигурации экзамена."
 
 
 class ExamNotConfiguredError(ExamError):
-    pass
+    user_message = "Экзамен не настроен."

@@ -1,2 +1,2 @@
 class BotError(Exception):
-    pass
+    user_message: str = "Произошла ошибка."
