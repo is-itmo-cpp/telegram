@@ -209,13 +209,15 @@ async def cmd_exam_status(message: Message, sheets: SheetsClient, storage: Stora
         return
 
     if tasks.spreadsheet_id and tasks.sheet_name:
-        tasks_link = f"https://docs.google.com/spreadsheets/d/{tasks.spreadsheet_id}/edit"
+        tasks_gid = await sheets.resolve_sheet_gid(tasks.spreadsheet_id, tasks.sheet_name)
+        tasks_link = f"https://docs.google.com/spreadsheets/d/{tasks.spreadsheet_id}/edit#gid={tasks_gid}"
         tasks_line = f"- Билеты: [{tasks.sheet_name}]({tasks_link}) ({tasks.count} записей) - {tasks.status}"
     else:
         tasks_line = "- Билеты: не настроены"
 
     if logs.spreadsheet_id and logs.sheet_name:
-        logs_link = f"https://docs.google.com/spreadsheets/d/{logs.spreadsheet_id}/edit"
+        logs_gid = await sheets.resolve_sheet_gid(logs.spreadsheet_id, logs.sheet_name)
+        logs_link = f"https://docs.google.com/spreadsheets/d/{logs.spreadsheet_id}/edit#gid={logs_gid}"
         logs_line = f"- Сдача: [{logs.sheet_name}]({logs_link}) ({logs.count} записей) - {logs.status}"
     else:
         logs_line = "- Сдача: не настроена"
