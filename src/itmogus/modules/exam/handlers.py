@@ -1,6 +1,7 @@
 from datetime import datetime
 from textwrap import dedent
 from typing import TypeGuard
+from zoneinfo import ZoneInfo
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -22,6 +23,7 @@ from itmogus.sheets.sheet import SheetsClient
 
 
 router = Router()
+TIMEZONE = ZoneInfo("Europe/Moscow")
 
 
 class TaskCallback(CallbackData, prefix="task"):
@@ -110,9 +112,9 @@ async def callback_select_task(
         await callback.answer("Задача не найдена")
         return
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
 
-    await exams.log_exam(student_isu, student_group, student_name, task.id, task.points)
+    await exams.log_exam(student_isu, student_group, student_name, task.id, task.points, timestamp)
 
     delivery_error = False
     users = UserRepository(sheets)

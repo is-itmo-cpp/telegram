@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 
 from itmogus.core.storage import Storage
 from itmogus.modules.exam.errors import ExamConfigError, ExamNotConfiguredError
@@ -54,13 +53,12 @@ class ExamRepository:
         tasks = await sheet.read_models(Task)
         return {task.id: task for task in tasks if task.id}
 
-    async def log_exam(self, isu: int, group: str, name: str, task_id: str, points: str) -> None:
+    async def log_exam(self, isu: int, group: str, name: str, task_id: str, points: str, timestamp: str) -> None:
         sheet = await self._get_sheet(self._exam_state().log)
         if sheet is None:
             return
 
         await sheet.assert_model_headers(ExamLog)
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await sheet.append_model(
             ExamLog(
                 isu=isu,
