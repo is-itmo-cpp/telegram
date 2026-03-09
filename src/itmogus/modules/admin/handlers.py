@@ -13,12 +13,10 @@ from itmogus.sheets.sheet import SheetsClient
 
 router = Router()
 
-LOGS_DIR = Path("logs")
-
 
 # Just reads the entire 10MB file. That'll do ¯\(ツ)/¯
 def read_logs(limit: int, criteria: tuple[str, str | int] | None = None) -> list[dict]:
-    log_file = LOGS_DIR / "itmogus.log"
+    log_file = Path(config.log_dir) / "itmogus.log"
     if not log_file.exists():
         return []
 
@@ -101,7 +99,7 @@ async def cmd_log(message: Message):
         elif arg.startswith("user:"):
             try:
                 criteria = ("user_id", int(arg.split(":")[1]))
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 await message.answer(f"Invalid user ID: {arg}")
                 return
         elif arg.startswith("event:"):
