@@ -8,6 +8,7 @@ from itmogus.sheets import cell
 class Task:
     _headers: ClassVar[list[list[str]]] = [
         ["№", "Название", "Баллы", "Текст задания", "Комментарии для принимающих"],
+        [],  # Arrayformulas
     ]
 
     id: str
@@ -36,6 +37,7 @@ class ExamLog:
     _headers: ClassVar[list[list[str]]] = [
         ["Студент", "", "", "Время", "", "Задание", "", "", "Проверяющий", "Комментарий"],
         ["ИСУ", "Группа", "ФИО", "Начало", "Прошло", "№", "Max", "Итог", "", ""],
+        [],  # Arrayformulas
     ]
 
     isu: int

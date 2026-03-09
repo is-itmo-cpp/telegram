@@ -277,17 +277,16 @@ def _assert_headers_match(
     header_row_count = len(expected_rows)
     actual_header_rows = rows[:header_row_count]
 
-    width = max(
-        max((len(row) for row in expected_rows), default=0),
-        max((len(row) for row in actual_header_rows), default=0),
-    )
-
     mismatches: list[str] = []
     for row_index in range(header_row_count):
         expected_row = expected_rows[row_index] if row_index < len(expected_rows) else []
         actual_row = actual_header_rows[row_index] if row_index < len(actual_header_rows) else []
-        for col_index in range(width):
-            expected_value = _normalize_cell(expected_row[col_index] if col_index < len(expected_row) else "")
+
+        if not expected_row:
+            continue
+
+        for col_index in range(len(expected_row)):
+            expected_value = _normalize_cell(expected_row[col_index])
             actual_value = _normalize_cell(actual_row[col_index] if col_index < len(actual_row) else "")
             if expected_value != actual_value:
                 mismatches.append(
