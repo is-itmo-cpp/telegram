@@ -70,13 +70,16 @@ class Sheet:
         rows = await self._rows_cache.get_or_load(self._load_rows)
         return [list(row) for row in rows]
 
-    async def append_row(self, values: list[Any]) -> None:
-        await self._client.append_row(self.spreadsheet_id, self.name, values)
+    async def append_row(self, values: list[Any], header_rows: int = 1) -> None:
+        data_start_row = header_rows + 1
+        range_ref = f"{_quote_sheet_name(self.name)}!A{data_start_row}"
+        await self._client.append_row(self.spreadsheet_id, self.name, values, range_ref)
         self.invalidate_cache()
 
     async def append_model(self, item: SerializableRowModel) -> None:
         await self.assert_headers(item._headers)
-        await self.append_row(item.to_row())
+        header_rows = len(item._headers)
+        await self.append_row(item.to_row(), header_rows=header_rows)
 
     async def assert_headers(self, expected_rows: list[list[str]]) -> None:
         if not expected_rows:
@@ -216,11 +219,14 @@ class SheetsClient:
         )
         return result.get("values", [])
 
-    async def append_row(self, spreadsheet_id: str, sheet_name: str, values: list[Any]) -> None:
+    async def append_row(
+        self, spreadsheet_id: str, sheet_name: str, values: list[Any], range_ref: str | None = None
+    ) -> None:
+        range_param = range_ref if range_ref else sheet_name
         await self._request(
             lambda: self._service.spreadsheets.values.append(
                 spreadsheetId=spreadsheet_id,
-                range=sheet_name,
+                range=range_param,
                 json={"values": [values]},
                 insertDataOption="INSERT_ROWS",
                 valueInputOption="USER_ENTERED",
