@@ -4,7 +4,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message
 
 from itmogus.errors import BotError
-from itmogus.modules.exam.errors import ExamConfigError
+from itmogus.modules.exam.errors import ExamConfigError, ExamNotConfiguredError
 from itmogus.modules.users.errors import (
     IsuAlreadyBoundError,
     NoSuchIsuError,
@@ -30,6 +30,7 @@ USER_MESSAGES = {
     SheetsAPIError: "Ошибка API Google.",
     SheetsSchemaError: "Неверная структура листа.",
     ExamConfigError: "Ошибка конфигурации экзамена.",
+    ExamNotConfiguredError: "Экзамен не настроен.",
     TelegramAlreadyBoundError: "Этот Telegram уже привязан к другому ИСУ.",
     IsuAlreadyBoundError: "Этот ИСУ уже привязан к другому Telegram.",
     NoSuchIsuError: "Студент с таким ИСУ не найден.",
@@ -43,7 +44,7 @@ class ErrorMiddleware(BaseMiddleware):
         except BotError as e:
             base_message = USER_MESSAGES.get(type(e), "Произошла ошибка. Попробуйте позже.")
 
-            if isinstance(e, SheetsSchemaError | ExamConfigError) and str(e):
+            if isinstance(e, SheetsSchemaError | ExamConfigError | ExamNotConfiguredError) and str(e):
                 user_message = f"{base_message}\n\n{e}"
             else:
                 user_message = base_message

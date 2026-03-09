@@ -59,13 +59,15 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
         await message.answer("❌ Неверный формат ИСУ.\n\n📝 Использование: /give <ИСУ>")
         return
 
+    exams = ExamRepository(sheets, storage)
+    exams.assert_configured()
+
     users = UserRepository(sheets)
     student = await users.get_student_by_isu(int(isu_str))
     if not student:
         await message.answer(f"❌ Студент с ИСУ {isu_str} не найден.")
         return
 
-    exams = ExamRepository(sheets, storage)
     keyboard = await get_tasks_keyboard(exams)
     await state.update_data(student_isu=student.isu, student_name=student.name, student_group=student.group)
     await message.answer(

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 from itmogus.core.storage import Storage
-from itmogus.modules.exam.errors import ExamConfigError
+from itmogus.modules.exam.errors import ExamConfigError, ExamNotConfiguredError
 from itmogus.modules.exam.models import ExamLog, ExamSheetStatus, ExamStatus, Task
 from itmogus.modules.exam.state import ExamState
 from itmogus.sheets import SheetRef, SheetsSchemaError, parse_sheets_url
@@ -19,6 +19,14 @@ class ExamRepository:
 
     def _exam_state(self) -> ExamState:
         return self._state.get("exam", ExamState)
+
+    def is_configured(self) -> bool:
+        state = self._exam_state()
+        return bool(state.tasks.spreadsheet_id and state.log.spreadsheet_id)
+
+    def assert_configured(self) -> None:
+        if not self.is_configured():
+            raise ExamNotConfiguredError("Не настроены таблицы билетов и сдачи.")
 
     async def _get_sheet(self, ref: SheetRef) -> Sheet | None:
         if not ref.spreadsheet_id or not ref.sheet_name:

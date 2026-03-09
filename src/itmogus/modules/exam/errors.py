@@ -7,3 +7,7 @@ class ExamError(BotError):
 
 class ExamConfigError(ExamError):
     pass
+
+
+class ExamNotConfiguredError(ExamError):
+    pass
