@@ -41,7 +41,12 @@ class ErrorMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except BotError as e:
-            user_message = USER_MESSAGES.get(type(e), "Произошла ошибка. Попробуйте позже.")
+            base_message = USER_MESSAGES.get(type(e), "Произошла ошибка. Попробуйте позже.")
+
+            if isinstance(e, SheetsSchemaError | ExamConfigError) and str(e):
+                user_message = f"{base_message}\n\n{e}"
+            else:
+                user_message = base_message
 
             if isinstance(event, Message):
                 await event.answer(user_message)
