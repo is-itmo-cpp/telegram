@@ -70,12 +70,15 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
         await message.answer(f"❌ Студент с ИСУ {isu_str} не найден.")
         return
 
+    registered_user = await users.get_user_by_isu(student.isu)
+    header = "🎓 Студент найден" if registered_user else "⚠️ Студент не зарегистрирован в Telegram"
+
     keyboard = await get_tasks_keyboard(exams)
     await state.update_data(student_isu=student.isu, student_name=student.name, student_group=student.group)
     await message.answer(
         dedent(
             f"""\
-            🎓 Студент найден
+            {header}
 
             👤 {student.name}
             🆔 ИСУ: {student.isu}
@@ -128,6 +131,8 @@ async def callback_select_task(
             )
         except Exception:
             delivery_error = True
+    else:
+        delivery_error = True
 
     if is_accessible_message(callback.message):
         text = dedent(
