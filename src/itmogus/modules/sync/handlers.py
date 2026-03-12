@@ -32,22 +32,26 @@ async def cmd_sync(message: Message):
 
     try:
         total, success, failed = await asyncio.wait_for(run_sync(prefix), timeout=600)
-
-        logger.info("Synced repos with prefix '%s': %d/%d success, %d failed", prefix, success, total, failed)
-
-        await status_msg.edit_text(
-            dedent(
-                f"""\
-                ✅ Синхронизация завершена
-
-                📂 Префикс: {prefix}
-                📊 Всего: {total}
-                ✅ Успешно: {success}
-                ❌ Ошибки: {failed}
-                """
-            ).strip()
-        )
     except asyncio.TimeoutError:
+        logger.warning("Sync timed out for prefix '%s'", prefix)
         await status_msg.edit_text("⏱ Синхронизация превысила таймаут (10 минут)")
+        return
     except Exception as e:
-        await status_msg.edit_text(f"❌ Ошибка: {e}")
+        logger.error("Sync failed for prefix '%s': %s", prefix, e)
+        await status_msg.edit_text("❌ Ошибка при синхронизации. Попробуйте позже.")
+        return
+
+    logger.info("Synced repos with prefix '%s': %d/%d success, %d failed", prefix, success, total, failed)
+
+    await status_msg.edit_text(
+        dedent(
+            f"""\
+            ✅ Синхронизация завершена
+
+            📂 Префикс: {prefix}
+            📊 Всего: {total}
+            ✅ Успешно: {success}
+            ❌ Ошибки: {failed}
+            """
+        ).strip()
+    )

@@ -1,9 +1,9 @@
 import aiohttp
 
-from itmogus.errors import BotError
+from itmogus.errors import InfraError
 
 
-class SheetsError(BotError):
+class SheetsError(InfraError):
     pass
 
 

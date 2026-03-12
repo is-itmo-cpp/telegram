@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from textwrap import dedent
 from typing import TypeGuard
@@ -5,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Router
 from aiogram.filters import Command
+from aiogram.exceptions import AiogramError
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -16,14 +18,25 @@ from aiogram.types import (
 )
 
 from itmogus.core.storage import Storage
+from itmogus.modules.exam.errors import ExamConfigError
 from itmogus.modules.exam.repository import ExamRepository
 from itmogus.modules.users.auth import HasRole, Role
 from itmogus.modules.users.repository import UserRepository
+from itmogus.result import Fail, Ok
 from itmogus.sheets.sheet import SheetsClient
 
 
+logger = logging.getLogger(__name__)
+
 router = Router()
 TIMEZONE = ZoneInfo("Europe/Moscow")
+
+EXAM_ERROR_MESSAGES = {
+    ExamConfigError.INVALID_URL: "❌ Не удалось распознать ссылку.",
+    ExamConfigError.SHEET_NOT_FOUND: "❌ Не удалось найти лист.",
+    ExamConfigError.SCHEMA_MISMATCH: "❌ Неверная структура листа.",
+    ExamConfigError.NOT_CONFIGURED: "❌ Экзамен не настроен.",
+}
 
 
 class TaskCallback(CallbackData, prefix="task"):
@@ -62,7 +75,12 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
         return
 
     exams = ExamRepository(sheets, storage)
-    exams.assert_configured()
+    match exams.check_configured():
+        case Fail(error):
+            await message.answer(EXAM_ERROR_MESSAGES[error])
+            return
+        case Ok():
+            pass
 
     users = UserRepository(sheets)
     student = await users.get_student_by_isu(int(isu_str))
@@ -129,9 +147,11 @@ async def callback_select_task(
                 f"Вам выдано задание:\n\n```cpp\n{task.text}\n```\nЖелаем удачи!",
                 parse_mode="Markdown",
             )
-        except Exception:
+        except AiogramError:
+            logger.exception("Failed to send task to user telegram_id=%d, ISU=%d", recipient.telegram_id, recipient.isu)
             delivery_error = True
     else:
+        logger.error("Failed to send task to user ISU=%d", student_isu)
         delivery_error = True
 
     if is_accessible_message(callback.message):
@@ -180,8 +200,11 @@ async def cmd_exam_tasks(message: Message, sheets: SheetsClient, storage: Storag
         return
 
     exams = ExamRepository(sheets, storage)
-    msg = await exams.set_exam_tasks(args[1].strip())
-    await message.answer(msg)
+    match await exams.set_exam_tasks(args[1].strip()):
+        case Fail(error):
+            await message.answer(EXAM_ERROR_MESSAGES[error])
+        case Ok(sheet_name):
+            await message.answer(f"✅ Таблица билетов установлена на лист '{sheet_name}'")
 
 
 @router.message(Command("exam_logs"), HasRole(Role.OWNER))
@@ -202,8 +225,11 @@ async def cmd_exam_logs(message: Message, sheets: SheetsClient, storage: Storage
         return
 
     exams = ExamRepository(sheets, storage)
-    msg = await exams.set_exam_log(args[1].strip())
-    await message.answer(msg)
+    match await exams.set_exam_log(args[1].strip()):
+        case Fail(error):
+            await message.answer(EXAM_ERROR_MESSAGES[error])
+        case Ok(sheet_name):
+            await message.answer(f"✅ Таблица сдачи установлена на лист '{sheet_name}'")
 
 
 @router.message(Command("exam"), HasRole(Role.TEAM))

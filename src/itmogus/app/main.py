@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 
-from itmogus.app.middleware import ErrorMiddleware
+from itmogus.app.errors import setup_error_handlers
 from itmogus.core.config import config
 from itmogus.core.storage import Storage
 from itmogus.logging import ContextMiddleware, setup_logging
@@ -52,8 +52,8 @@ async def main():
 
     dp.message.middleware(ContextMiddleware())
     dp.callback_query.middleware(ContextMiddleware())
-    dp.message.middleware(ErrorMiddleware())
-    dp.callback_query.middleware(ErrorMiddleware())
+
+    setup_error_handlers(dp)
 
     dp.include_router(users_router)
     dp.include_router(exam_router)

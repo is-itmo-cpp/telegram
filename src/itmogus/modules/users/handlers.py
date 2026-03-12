@@ -7,7 +7,8 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 
 from itmogus.modules.users.auth import Role, get_role, is_owner
-from itmogus.modules.users.repository import UserRepository
+from itmogus.modules.users.repository import RegisterError, UserRepository
+from itmogus.result import Fail, Ok
 from itmogus.sheets.sheet import SheetsClient
 
 
@@ -136,10 +137,21 @@ async def callback_register(
         return
 
     users = UserRepository(sheets)
-    student = await users.register_user(callback.from_user.id, callback_data.isu)
-    if is_accessible_message(callback.message):
-        await callback.message.edit_text(f"✅ Вы успешно зарегистрированы, {student.name}!")
-    await callback.answer()
+    error_messages = {
+        RegisterError.TELEGRAM_ALREADY_BOUND: "❌ Этот Telegram уже привязан к другому ИСУ.",
+        RegisterError.ISU_ALREADY_BOUND: "❌ Этот ИСУ уже привязан к другому Telegram.",
+        RegisterError.NO_SUCH_ISU: "❌ Студент с таким ИСУ не найден.",
+    }
+
+    match await users.register_user(callback.from_user.id, callback_data.isu):
+        case Fail(error):
+            if is_accessible_message(callback.message):
+                await callback.message.edit_text(error_messages[error])
+            await callback.answer()
+        case Ok(student):
+            if is_accessible_message(callback.message):
+                await callback.message.edit_text(f"✅ Вы успешно зарегистрированы, {student.name}!")
+            await callback.answer()
 
 
 @router.message(Command("who"))

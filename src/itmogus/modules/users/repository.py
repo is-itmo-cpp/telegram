@@ -1,12 +1,9 @@
 import logging
+from enum import Enum
 
 from itmogus.core.config import config
-from itmogus.modules.users.errors import (
-    IsuAlreadyBoundError,
-    NoSuchIsuError,
-    TelegramAlreadyBoundError,
-)
 from itmogus.modules.users.models import BotUser, Student, TeamMember
+from itmogus.result import Fail, Ok, Result
 from itmogus.sheets import Sheet, SheetsClient
 
 
@@ -15,6 +12,12 @@ logger = logging.getLogger(__name__)
 STUDENTS_SHEET = "Students"
 BOT_USERS_SHEET = "Users"
 TEAM_SHEET = "Team"
+
+
+class RegisterError(Enum):
+    TELEGRAM_ALREADY_BOUND = "telegram_already_bound"
+    ISU_ALREADY_BOUND = "isu_already_bound"
+    NO_SUCH_ISU = "no_such_isu"
 
 
 class UserRepository:
@@ -55,24 +58,25 @@ class UserRepository:
         users = await self.get_all_bot_users_by_isu()
         return users.get(isu)
 
-    async def register_user(self, tg_id: int, isu: int) -> Student:
+    async def register_user(self, tg_id: int, isu: int) -> Result[Student, RegisterError]:
         users = await self.get_all_bot_users()
         user_by_tg = users.get(tg_id)
         if user_by_tg is not None:
-            raise TelegramAlreadyBoundError()
+            return Fail(RegisterError.TELEGRAM_ALREADY_BOUND)
 
         isu_matches = [user for user in users.values() if user.isu == isu]
         if any(user.telegram_id != tg_id for user in isu_matches):
-            raise IsuAlreadyBoundError()
+            return Fail(RegisterError.ISU_ALREADY_BOUND)
 
-        if (student := await self.get_student_by_isu(isu)) is None:
-            raise NoSuchIsuError()
+        student = await self.get_student_by_isu(isu)
+        if student is None:
+            return Fail(RegisterError.NO_SUCH_ISU)
 
         await self._bot_users_sheet().append_model(BotUser(isu=isu, telegram_id=tg_id))
 
         logger.info("User %d registered as ISU %d (%s)", tg_id, isu, student.name)
 
-        return student
+        return Ok(student)
 
     async def get_all_team_members(self) -> list[TeamMember]:
         return await self._team_sheet().read_models(TeamMember)

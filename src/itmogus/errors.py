@@ -1,2 +1,2 @@
-class BotError(Exception):
+class InfraError(Exception):
     user_message: str = "Произошла ошибка."

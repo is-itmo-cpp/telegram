@@ -1,13 +1,8 @@
-from itmogus.errors import BotError
+from enum import Enum
 
 
-class ExamError(BotError):
-    pass
-
-
-class ExamConfigError(ExamError):
-    user_message = "Ошибка конфигурации экзамена."
-
-
-class ExamNotConfiguredError(ExamError):
-    user_message = "Экзамен не настроен."
+class ExamConfigError(Enum):
+    INVALID_URL = "invalid_url"
+    SHEET_NOT_FOUND = "sheet_not_found"
+    SCHEMA_MISMATCH = "schema_mismatch"
+    NOT_CONFIGURED = "not_configured"

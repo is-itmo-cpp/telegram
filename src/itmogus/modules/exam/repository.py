@@ -1,10 +1,11 @@
 import logging
 
 from itmogus.core.storage import Storage
-from itmogus.modules.exam.errors import ExamConfigError, ExamNotConfiguredError
+from itmogus.modules.exam.errors import ExamConfigError
 from itmogus.modules.exam.models import ExamLog, ExamSheetStatus, ExamStatus, Task
 from itmogus.modules.exam.state import ExamState
-from itmogus.sheets import SheetRef, SheetsSchemaError, parse_sheets_url
+from itmogus.result import Fail, Ok, Result
+from itmogus.sheets import SheetNotFoundError, SheetRef, SheetsSchemaError, parse_sheets_url
 from itmogus.sheets.sheet import HeaderModel, Sheet, SheetsClient
 
 
@@ -23,9 +24,10 @@ class ExamRepository:
         state = self._exam_state()
         return bool(state.tasks.spreadsheet_id and state.log.spreadsheet_id)
 
-    def assert_configured(self) -> None:
+    def check_configured(self) -> Result[None, ExamConfigError]:
         if not self.is_configured():
-            raise ExamNotConfiguredError("Не настроены таблицы билетов и сдачи.")
+            return Fail(ExamConfigError.NOT_CONFIGURED)
+        return Ok(None)
 
     async def _get_sheet(self, ref: SheetRef) -> Sheet | None:
         if not ref.spreadsheet_id or not ref.sheet_name:
@@ -76,10 +78,10 @@ class ExamRepository:
 
         logger.info("Task %s (%s points) assigned to ISU %d", task_id, points, isu)
 
-    async def set_exam_tasks(self, url: str) -> str:
+    async def set_exam_tasks(self, url: str) -> Result[str, ExamConfigError]:
         parsed = parse_sheets_url(url)
         if not parsed:
-            raise ExamConfigError("Не удалось распознать ссылку.")
+            return Fail(ExamConfigError.INVALID_URL)
 
         spreadsheet_id, gid = parsed
 
@@ -87,9 +89,9 @@ class ExamRepository:
             sheet = await self._client.get_sheet_by_gid(spreadsheet_id, gid)
             await sheet.assert_model_headers(Task)
         except SheetsSchemaError:
-            raise
-        except Exception as e:
-            raise ExamConfigError(f"Не удалось найти лист с gid={gid}") from e
+            return Fail(ExamConfigError.SCHEMA_MISMATCH)
+        except SheetNotFoundError:
+            return Fail(ExamConfigError.SHEET_NOT_FOUND)
 
         state = self._exam_state()
         state.tasks = SheetRef(spreadsheet_id=spreadsheet_id, sheet_name=sheet.name)
@@ -97,12 +99,12 @@ class ExamRepository:
         self._client.invalidate_all_sheets()
 
         logger.info("Exam tasks sheet set to '%s'", sheet.name)
-        return f"Таблица билетов установлена на лист '{sheet.name}'"
+        return Ok(sheet.name)
 
-    async def set_exam_log(self, url: str) -> str:
+    async def set_exam_log(self, url: str) -> Result[str, ExamConfigError]:
         parsed = parse_sheets_url(url)
         if not parsed:
-            raise ExamConfigError("Не удалось распознать ссылку.")
+            return Fail(ExamConfigError.INVALID_URL)
 
         spreadsheet_id, gid = parsed
 
@@ -110,9 +112,9 @@ class ExamRepository:
             sheet = await self._client.get_sheet_by_gid(spreadsheet_id, gid)
             await sheet.assert_model_headers(ExamLog)
         except SheetsSchemaError:
-            raise
-        except Exception as e:
-            raise ExamConfigError(f"Не удалось найти лист с gid={gid}") from e
+            return Fail(ExamConfigError.SCHEMA_MISMATCH)
+        except SheetNotFoundError:
+            return Fail(ExamConfigError.SHEET_NOT_FOUND)
 
         state = self._exam_state()
         state.log = SheetRef(spreadsheet_id=spreadsheet_id, sheet_name=sheet.name)
@@ -120,7 +122,7 @@ class ExamRepository:
         self._client.invalidate_all_sheets()
 
         logger.info("Exam log sheet set to '%s'", sheet.name)
-        return f"Таблица сдачи установлена на лист '{sheet.name}'"
+        return Ok(sheet.name)
 
     async def _sheet_status(self, ref: SheetRef, model_cls: type[HeaderModel]) -> ExamSheetStatus:
         sheet = await self._get_sheet(ref)
