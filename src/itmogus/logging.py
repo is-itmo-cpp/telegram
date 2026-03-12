@@ -16,12 +16,21 @@ current_event_id: ContextVar[str | None] = ContextVar("current_event_id", defaul
 
 
 RE_AIOGRAM_UNHANDLED = re.compile(r"^Update id=\d+ is not handled\.")
+RE_AIOGRAM_HANDLED = re.compile(r"^Update id=\d+.*is handled")
 
 
-class AiogramNotHandledFilter(logging.Filter):
+class AiogramEventFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.name == "aiogram.event" and RE_AIOGRAM_UNHANDLED.match(record.getMessage()):
+        if record.name != "aiogram.event":
+            return True
+
+        if RE_AIOGRAM_UNHANDLED.match(record.getMessage()):
             return False
+
+        if RE_AIOGRAM_HANDLED.match(record.getMessage()):
+            record.levelno = logging.DEBUG
+            record.levelname = "DEBUG"
+
         return True
 
 
@@ -80,10 +89,10 @@ def setup_logging(log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)
 
     context_filter = ContextFilter()
-    aiogram_filter = AiogramNotHandledFilter()
+    aiogram_filter = AiogramEventFilter()
 
     file_handler = RotatingFileHandler(
         log_dir / "itmogus.log",
@@ -91,13 +100,13 @@ def setup_logging(log_dir: Path) -> None:
         backupCount=5,
         encoding="utf-8",
     )
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(JSONFormatter())
     file_handler.addFilter(context_filter)
     file_handler.addFilter(aiogram_filter)
 
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(JSONFormatter())
     console_handler.addFilter(context_filter)
     console_handler.addFilter(aiogram_filter)
