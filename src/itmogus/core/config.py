@@ -27,6 +27,7 @@ class Config(BaseSettings):
     users_table_id: str
     github_token: str
     github_org: str
+    github_classroom: str
     github_branch: str = "main"
     storage_dir: str = "state"
     log_dir: str = "logs"

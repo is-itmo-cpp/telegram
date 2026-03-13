@@ -22,7 +22,9 @@ INVITE_ERROR_MESSAGES = {
     InviteError.NOT_REGISTERED: "❌ Вы не зарегистрированы. Используйте /register <ИСУ>",
     InviteError.NO_GITHUB: "❌ У вас не указан GitHub в профиле. Обратитесь к преподавателю.",
     InviteError.ALREADY_HAS_ACCESS: "✅ Вы уже имеете доступ к репозиторию.",
-    InviteError.REPO_NOT_FOUND: "❌ Репозиторий не найден. Обратитесь к преподавателю.",
+    InviteError.TEMPLATE_NOT_FOUND: "❌ Шаблон репозитория не найден. Обратитесь к преподавателю.",
+    InviteError.TEMPLATE_NOT_PRIVATE: "❌ Шаблон репозитория должен быть приватным. Обратитесь к преподавателю.",
+    InviteError.FORK_FAILED: "❌ Не удалось создать репозиторий. Попробуйте позже.",
 }
 
 
@@ -72,9 +74,8 @@ async def process_lab_number(message: Message, state: FSMContext):
         return
 
     lab_number = int(lab_str)
-    repo = f"labwork{lab_number}-{github_username}"
 
-    result = await ensure_invitation(repo, github_username)
+    result = await ensure_invitation(lab_number, github_username)
 
     match result:
         case Ok((invitation, True)):

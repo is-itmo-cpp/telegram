@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from itmogus.core.config import config
-from itmogus.github import GitHubClient, GitHubNotFoundError
+from itmogus.github import GitHubClient, GitHubError, GitHubNotFoundError
 from itmogus.modules.invite.errors import InviteError
 from itmogus.result import Fail, Ok, Result
 
@@ -28,6 +28,37 @@ def _parse_invitation(data: dict) -> Invitation:
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
         expired=data.get("expired", False),
     )
+
+
+async def get_repo_visibility(github: GitHubClient, org: str, repo: str) -> str | None:
+    try:
+        resp = await github.request("GET", f"/repos/{org}/{repo}")
+        data = await resp.json()
+        return data.get("visibility")
+    except GitHubNotFoundError:
+        return None
+
+
+async def fork_repo(
+    github: GitHubClient,
+    template_org: str,
+    template_repo: str,
+    target_org: str,
+    target_name: str,
+) -> bool:
+    try:
+        resp = await github.request(
+            "POST",
+            f"/repos/{template_org}/{template_repo}/forks",
+            json={
+                "organization": target_org,
+                "name": target_name,
+                "default_branch_only": True,
+            },
+        )
+        return resp.status == 202
+    except GitHubError:
+        return False
 
 
 async def get_invitations(github: GitHubClient, org: str, repo: str) -> list[Invitation]:
@@ -80,12 +111,49 @@ async def get_user_invitation(
     return None
 
 
+def _get_template_name(lab_number: int) -> str:
+    return f"{config.github_classroom}-labwork{lab_number}-labwork{lab_number}"
+
+
+def _get_repo_name(lab_number: int, github_username: str) -> str:
+    return f"labwork{lab_number}-{github_username}"
+
+
 async def ensure_invitation(
-    repo: str,
+    lab_number: int,
     github_username: str,
 ) -> Result[tuple[Invitation, bool], InviteError]:
+    repo = _get_repo_name(lab_number, github_username)
+
     try:
         async with GitHubClient(config.github_token) as github:
+            visibility = await get_repo_visibility(github, config.github_org, repo)
+
+            if visibility is None:
+                template = _get_template_name(lab_number)
+                template_visibility = await get_repo_visibility(github, config.github_org, template)
+
+                if template_visibility is None:
+                    logger.warning("Template not found: %s/%s", config.github_org, template)
+                    return Fail(InviteError.TEMPLATE_NOT_FOUND)
+
+                if template_visibility != "private":
+                    logger.warning("Template is not private: %s/%s", config.github_org, template)
+                    return Fail(InviteError.TEMPLATE_NOT_PRIVATE)
+
+                success = await fork_repo(
+                    github,
+                    config.github_org,
+                    template,
+                    config.github_org,
+                    repo,
+                )
+                if not success:
+                    logger.warning("Failed to fork template: %s -> %s", template, repo)
+                    return Fail(InviteError.FORK_FAILED)
+
+                logger.info("Forked template %s -> %s", template, repo)
+
             existing = await get_user_invitation(github, config.github_org, repo, github_username)
 
             if existing is not None:
@@ -98,6 +166,6 @@ async def ensure_invitation(
                 return Fail(InviteError.ALREADY_HAS_ACCESS)
 
             return Ok((new_inv, True))
-    except GitHubNotFoundError:
-        logger.warning("Repository not found: %s/%s", config.github_org, repo)
-        return Fail(InviteError.REPO_NOT_FOUND)
+    except GitHubError:
+        logger.exception("GitHub error during invitation")
+        return Fail(InviteError.FORK_FAILED)
