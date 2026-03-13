@@ -12,6 +12,7 @@ from itmogus.core.storage import Storage
 from itmogus.logging import ContextMiddleware, setup_logging
 from itmogus.modules.admin import router as admin_router
 from itmogus.modules.exam import router as exam_router
+from itmogus.modules.invite import router as invite_router
 from itmogus.modules.sync import router as sync_router
 from itmogus.modules.users import router as users_router
 from itmogus.sheets.sheet import SheetsClient
@@ -24,6 +25,7 @@ async def register_commands(bot: Bot) -> None:
     commands = [
         BotCommand(command="start", description="Справка по командам"),
         BotCommand(command="register", description="Регистрация по ИСУ"),
+        BotCommand(command="invite", description="Получить доступ к репозиторию"),
         BotCommand(command="who", description="Информация о пользователе"),
         BotCommand(command="give", description="Выдать задачу студенту"),
         BotCommand(command="exam", description="Статус экзамена"),
@@ -56,6 +58,7 @@ async def main():
     setup_error_handlers(dp)
 
     dp.include_router(users_router)
+    dp.include_router(invite_router)
     dp.include_router(exam_router)
     dp.include_router(sync_router)
     dp.include_router(admin_router)
