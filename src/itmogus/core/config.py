@@ -24,9 +24,9 @@ class Config(BaseSettings):
     bot_token: str
     owner_ids: OwnerIds = set()
     google_credentials_path: str = "credentials.json"
-    users_table_id: str = ""
-    github_token: str = ""
-    github_org: str = ""
+    users_table_id: str
+    github_token: str
+    github_org: str
     github_branch: str = "main"
     storage_dir: str = "state"
     log_dir: str = "logs"
