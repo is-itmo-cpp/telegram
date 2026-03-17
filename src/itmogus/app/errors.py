@@ -17,15 +17,11 @@ def setup_error_handlers(dp: Dispatcher) -> None:
         e = event.exception
         assert isinstance(e, InfraError)
 
-        message = e.user_message
-        if str(e):
-            message = f"{message}\n\n{e}"
-
         update = event.update
         if update.message:
-            await update.message.answer(message)
+            await update.message.answer(e.user_message)
         elif update.callback_query:
-            await update.callback_query.answer(message, show_alert=True)
+            await update.callback_query.answer(e.user_message, show_alert=True)
 
         logger.error("%s: %s", type(e).__name__, e)
 
