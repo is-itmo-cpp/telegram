@@ -19,15 +19,29 @@ class Invitation:
     created_at: datetime
     expired: bool
 
+    @classmethod
+    def parse(cls, data: dict) -> Self:
+        return cls(
+            id=data["id"],
+            invitee_login=data["invitee"]["login"],
+            html_url=data["html_url"],
+            created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
+            expired=data.get("expired", False),
+        )
 
-def _parse_invitation(data: dict) -> Invitation:
-    return Invitation(
-        id=data["id"],
-        invitee_login=data["invitee"]["login"],
-        html_url=data["html_url"],
-        created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
-        expired=data.get("expired", False),
-    )
+
+class EnsureStatus:
+    @dataclass
+    class RepoExists:
+        url: str
+
+    @dataclass
+    class InvitationCreated:
+        invitation: Invitation
+
+    @dataclass
+    class InvitationExists:
+        invitation: Invitation
 
 
 async def get_repo_visibility(github: GitHubClient, org: str, repo: str) -> str | None:
@@ -64,7 +78,7 @@ async def fork_repo(
 async def get_invitations(github: GitHubClient, org: str, repo: str) -> list[Invitation]:
     resp = await github.request("GET", f"/repos/{org}/{repo}/invitations")
     data = await resp.json()
-    return [_parse_invitation(item) for item in data]
+    return [Invitation.parse(item) for item in data]
 
 
 async def add_collaborator(
@@ -91,7 +105,7 @@ async def add_collaborator(
     )
 
     data = await resp.json()
-    return _parse_invitation(data)
+    return Invitation.parse(data)
 
 
 async def cancel_invitation(github: GitHubClient, org: str, repo: str, invitation_id: int) -> None:
@@ -122,7 +136,7 @@ def _get_repo_name(lab_number: int, github_username: str) -> str:
 async def ensure_invitation(
     lab_number: int,
     github_username: str,
-) -> Result[tuple[Invitation, bool], InviteError]:
+) -> Result[EnsureStatus, InviteError]:
     repo = _get_repo_name(lab_number, github_username)
 
     try:
@@ -158,14 +172,15 @@ async def ensure_invitation(
 
             if existing is not None:
                 if not existing.expired:
-                    return Ok((existing, False))
+                    return Ok(EnsureStatus.InvitationExists(existing))
                 await cancel_invitation(github, config.github_org, repo, existing.id)
 
             new_inv = await add_collaborator(github, config.github_org, repo, github_username)
             if new_inv is None:
-                return Fail(InviteError.ALREADY_HAS_ACCESS)
+                repo = f"https://github.com/{config.github_org}/{repo}"
+                return Ok(EnsureStatus.RepoExists(repo))
 
-            return Ok((new_inv, True))
+            return Ok(EnsureStatus.InvitationCreated(new_inv))
     except GitHubError:
         logger.exception("GitHub error during invitation")
         return Fail(InviteError.FORK_FAILED)
