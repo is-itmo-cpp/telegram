@@ -53,7 +53,10 @@ async def cmd_start(message: Message, sheets: SheetsClient):
     users = UserRepository(sheets)
     role = await get_role(user.id, users)
 
-    commands = ["📝 /register <ИСУ> — регистрация"]
+    commands = [
+        "📝 /register <ИСУ> — регистрация",
+        "📧 /invite — получение доступа к репозиторию",
+    ]
 
     if role in (Role.TEAM, Role.OWNER):
         commands.append("📋 /give <ИСУ> — выдать задачу")
