@@ -23,6 +23,20 @@ class InviteState(StatesGroup):
     waiting_for_lab_number = State()
 
 
+ALLOWED_TEMPLATE_NAMES = {"livecoding2"}
+
+
+def _resolve_template_name(user_input: str) -> str | None:
+    if user_input.isdigit():
+        num = int(user_input)
+        if num < 1:
+            return None
+        return f"labwork{num}"
+    if user_input in ALLOWED_TEMPLATE_NAMES:
+        return user_input
+    return None
+
+
 @router.message(Command("invite"), F.chat.type == "private")
 async def cmd_invite(message: Message, state: FSMContext, sheets: SheetsClient):
     if message.from_user is None:
@@ -46,7 +60,7 @@ async def cmd_invite(message: Message, state: FSMContext, sheets: SheetsClient):
 
     await state.update_data(github_username=student.github)
     await state.set_state(InviteState.waiting_for_lab_number)
-    await message.answer("📝 Введите номер лабораторной работы, к которой у вас нету доступа:")
+    await message.answer("📝 Введите номер или название лабораторной работы (например: 1 или livecoding2):")
 
 
 @router.message(InviteState.waiting_for_lab_number)
@@ -60,12 +74,12 @@ async def process_lab_number(message: Message, state: FSMContext):
     github_username = data["github_username"]
 
     lab_str = message.text.strip()
-    if not lab_str.isdigit() or int(lab_str) < 1:
-        await message.answer("❌ Номер должен быть положительным целым числом.")
+    template_name = _resolve_template_name(lab_str)
+    if template_name is None:
+        await message.answer("❌ Введите положительное число или название (например: 1, livecoding2).")
         return
 
-    lab_number = int(lab_str)
-    result = await ensure_invitation(lab_number, github_username)
+    result = await ensure_invitation(template_name, github_username)
 
     match result:
         case Ok(EnsureStatus.InvitationCreated(invitation)):

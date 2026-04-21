@@ -125,26 +125,26 @@ async def get_user_invitation(
     return None
 
 
-def _get_template_name(lab_number: int) -> str:
-    return f"{config.github_classroom}-labwork{lab_number}-labwork{lab_number}"
+def _get_template_name(template_name: str) -> str:
+    return f"{config.github_classroom}-{template_name}-{template_name}"
 
 
-def _get_repo_name(lab_number: int, github_username: str) -> str:
-    return f"labwork{lab_number}-{github_username}"
+def _get_repo_name(template_name: str, github_username: str) -> str:
+    return f"{template_name}-{github_username}"
 
 
 async def ensure_invitation(
-    lab_number: int,
+    template_name: str,
     github_username: str,
 ) -> Result[EnsureStatus, InviteError]:
-    repo = _get_repo_name(lab_number, github_username)
+    repo = _get_repo_name(template_name, github_username)
 
     try:
         async with GitHubClient(config.github_token) as github:
             visibility = await get_repo_visibility(github, config.github_org, repo)
 
             if visibility is None:
-                template = _get_template_name(lab_number)
+                template = _get_template_name(template_name)
                 template_visibility = await get_repo_visibility(github, config.github_org, template)
 
                 if template_visibility is None:
