@@ -55,7 +55,22 @@ class ExamRepository:
         tasks = await sheet.read_models(Task)
         return {task.id: task for task in tasks if task.id}
 
-    async def log_exam(self, isu: int, group: str, name: str, task_id: str, points: str, timestamp: str) -> None:
+    def get_room(self, user_id: int) -> str:
+        return self._exam_state().rooms_by_user_id.get(user_id, "")
+
+    def set_room(self, user_id: int, room: str) -> None:
+        state = self._exam_state()
+        state.rooms_by_user_id[user_id] = room
+        self._state.save("exam")
+        logger.info("Exam room for user %d set to '%s'", user_id, room)
+
+    def clear_room(self, user_id: int) -> None:
+        state = self._exam_state()
+        state.rooms_by_user_id.pop(user_id, None)
+        self._state.save("exam")
+        logger.info("Exam room for user %d cleared", user_id)
+
+    async def log_exam(self, isu: int, group: str, name: str, room: str, task_id: str, points: str, timestamp: str) -> None:
         sheet = await self._get_sheet(self._exam_state().log)
         if sheet is None:
             return
@@ -66,6 +81,7 @@ class ExamRepository:
                 isu=isu,
                 group=group,
                 name=name,
+                room=room,
                 started_at=timestamp,
                 elapsed="",
                 task_id=task_id,
@@ -76,7 +92,7 @@ class ExamRepository:
             )
         )
 
-        logger.info("Task %s (%s points) assigned to ISU %d", task_id, points, isu)
+        logger.info("Task %s (%s points) assigned to ISU %d in room '%s'", task_id, points, isu, room)
 
     async def set_exam_tasks(self, url: str) -> Result[str, ExamConfigError]:
         parsed = parse_sheets_url(url)

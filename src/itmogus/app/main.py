@@ -28,6 +28,7 @@ async def register_commands(bot: Bot) -> None:
         BotCommand(command="invite", description="Получить доступ к репозиторию"),
         BotCommand(command="who", description="Информация о пользователе"),
         BotCommand(command="give", description="Выдать задачу студенту"),
+        BotCommand(command="room", description="Выбрать аудиторию экзамена"),
         BotCommand(command="exam", description="Статус экзамена"),
         BotCommand(command="exam_tasks", description="Настроить таблицу билетов"),
         BotCommand(command="exam_logs", description="Настроить таблицу сдачи"),

@@ -35,14 +35,15 @@ class Task:
 @dataclass
 class ExamLog:
     _headers: ClassVar[list[list[str]]] = [
-        ["Студент", "", "", "Время", "", "Задание", "", "", "Проверяющий", "Комментарий"],
-        ["ИСУ", "Группа", "ФИО", "Начало", "Прошло", "№", "Max", "Итог", "", ""],
+        ["Студент", "", "", "Ауд.", "Время", "", "Задание", "", "", "Проверяющий", "Комментарий"],
+        ["ИСУ", "Группа", "ФИО", "", "Начало", "Прошло", "№", "Max", "Итог", "", ""],
         [],  # Arrayformulas
     ]
 
     isu: int
     group: str
     name: str
+    room: str
     started_at: str
     elapsed: str
     task_id: str
@@ -56,6 +57,7 @@ class ExamLog:
             self.isu,
             self.group,
             self.name,
+            self.room,
             self.started_at,
             self.elapsed,
             self.task_id,

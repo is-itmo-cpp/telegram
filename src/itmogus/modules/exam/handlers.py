@@ -62,6 +62,38 @@ async def get_tasks_keyboard(exams: ExamRepository) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+@router.message(Command("room"), HasRole(Role.TEAM))
+async def cmd_room(message: Message, sheets: SheetsClient, storage: Storage):
+    if message.from_user is None:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    exams = ExamRepository(sheets, storage)
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2:
+        room = exams.get_room(message.from_user.id)
+        await message.answer(
+            dedent(
+                f"""\
+                🏫 Текущая аудитория: {room or "не выбрана"}
+
+                📝 Использование: /room <номер>
+                Для сброса: /room clear
+                """
+            ).strip()
+        )
+        return
+
+    room = args[1].strip()
+    if room.lower() in {"clear", "reset", "-"}:
+        exams.clear_room(message.from_user.id)
+        await message.answer("✅ Аудитория сброшена.")
+        return
+
+    exams.set_room(message.from_user.id, room)
+    await message.answer(f"✅ Аудитория установлена: {room}")
+
+
 @router.message(Command("give"), HasRole(Role.TEAM))
 async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, storage: Storage):
     args = (message.text or "").split(maxsplit=1)
@@ -75,6 +107,15 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
         return
 
     exams = ExamRepository(sheets, storage)
+    if message.from_user is None:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    room = exams.get_room(message.from_user.id)
+    if not room:
+        await message.answer("❌ Аудитория не выбрана.\n\n📝 Используйте: /room <номер>")
+        return
+
     match exams.check_configured():
         case Fail(error):
             await message.answer(EXAM_ERROR_MESSAGES[error])
@@ -92,7 +133,7 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
     header = "🎓 Студент найден" if registered_user else "⚠️ Студент не зарегистрирован в Telegram"
 
     keyboard = await get_tasks_keyboard(exams)
-    await state.update_data(student_isu=student.isu, student_name=student.name, student_group=student.group)
+    await state.update_data(student_isu=student.isu, student_name=student.name, student_group=student.group, room=room)
     await message.answer(
         dedent(
             f"""\
@@ -101,6 +142,7 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
             👤 {student.name}
             🆔 ИСУ: {student.isu}
             📚 Группа: {student.group}
+            🏫 Аудитория: {room}
 
             Выберите задачу:
             """
@@ -121,6 +163,7 @@ async def callback_select_task(
     student_isu = data.get("student_isu")
     student_name = data.get("student_name")
     student_group = data.get("student_group", "")
+    room = data.get("room", "")
 
     if not student_isu or not student_name:
         await callback.answer("Ошибка: данные выдачи потеряны")
@@ -135,7 +178,11 @@ async def callback_select_task(
 
     timestamp = datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
 
-    await exams.log_exam(student_isu, student_group, student_name, task.id, task.points, timestamp)
+    if not room:
+        await callback.answer("Ошибка: аудитория не выбрана")
+        return
+
+    await exams.log_exam(student_isu, student_group, student_name, room, task.id, task.points, timestamp)
 
     delivery_error = False
     users = UserRepository(sheets)
@@ -163,6 +210,7 @@ async def callback_select_task(
             🆔 ИСУ: {student_isu}
             📋 Задача: {task.name}
             💯 Баллы: {task.points}
+            🏫 Аудитория: {room}
             🕐 Время: {timestamp}
             """
         ).strip()
