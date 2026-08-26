@@ -55,7 +55,7 @@ async def cmd_start(message: Message, sheets: SheetsClient):
 
     commands = [
         "📝 /register <ИСУ> — регистрация",
-        "📧 /invite — получение доступа к репозиторию",
+        "📧 /invite <lab> — получение доступа к репозиторию",
     ]
 
     if role in (Role.TEAM, Role.OWNER):

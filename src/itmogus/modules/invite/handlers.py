@@ -2,8 +2,6 @@ import logging
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from itmogus.modules.invite.errors import InviteError
@@ -17,10 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 router = Router()
-
-
-class InviteState(StatesGroup):
-    waiting_for_lab_number = State()
 
 
 ALLOWED_TEMPLATE_NAMES = {"livecoding2"}
@@ -38,8 +32,18 @@ def _resolve_template_name(user_input: str) -> str | None:
 
 
 @router.message(Command("invite"), F.chat.type == "private")
-async def cmd_invite(message: Message, state: FSMContext, sheets: SheetsClient):
+async def cmd_invite(message: Message, sheets: SheetsClient):
     if message.from_user is None:
+        return
+
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer("📝 Использование: /invite <lab>\n\nПример: /invite 1")
+        return
+
+    template_name = _resolve_template_name(args[1].strip())
+    if template_name is None:
+        await message.answer("❌ Укажите положительное число или название (например: /invite 1, /invite livecoding2).")
         return
 
     users = UserRepository(sheets)
@@ -58,28 +62,7 @@ async def cmd_invite(message: Message, state: FSMContext, sheets: SheetsClient):
         await message.answer("❌ У вас не указан GitHub в профиле. Обратитесь к преподавателю.")
         return
 
-    await state.update_data(github_username=student.github)
-    await state.set_state(InviteState.waiting_for_lab_number)
-    await message.answer("📝 Введите номер или название лабораторной работы (например: 1 или livecoding2):")
-
-
-@router.message(InviteState.waiting_for_lab_number)
-async def process_lab_number(message: Message, state: FSMContext):
-    if message.text is None:
-        return
-
-    data = await state.get_data()
-    await state.clear()
-
-    github_username = data["github_username"]
-
-    lab_str = message.text.strip()
-    template_name = _resolve_template_name(lab_str)
-    if template_name is None:
-        await message.answer("❌ Введите положительное число или название (например: 1, livecoding2).")
-        return
-
-    result = await ensure_invitation(template_name, github_username)
+    result = await ensure_invitation(template_name, student.github)
 
     match result:
         case Ok(EnsureStatus.InvitationCreated(invitation)):
