@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from itmogus.core.config import config
 from itmogus.github import GitHubClient, GitHubError
+from itmogus.labs import get_template_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,6 @@ GITHUB_WORKERS = 16
 
 @dataclass
 class SyncProgress:
-    scanned: int = 0
     found: int = 0
     total: int | None = None
     success: int = 0
@@ -24,49 +24,22 @@ class SyncProgress:
         return self.success + self.failed
 
 
-# GitHub does not have any pagination API.
-# Repos may get lost if somebody deletes their repo during fetch. Let's just hope that they won't.
-async def fetch_repos(
+async def fetch_forks(
     github: GitHubClient,
     org: str,
-    prefix: str,
+    template_repo: str,
     progress: SyncProgress | None = None,
 ) -> list[str]:
-    next_page = 1
-    max_existing = float("inf")
     repos = []
 
-    async def worker():
-        nonlocal next_page, max_existing, repos
+    async for page in github.paginate(
+        f"/repos/{org}/{template_repo}/forks",
+        params={"sort": "oldest"},
+    ):
+        repos.extend(repo["name"] for repo in page)
+        if progress is not None:
+            progress.found += len(page)
 
-        # Optimistic prefetch.
-        while next_page <= max_existing:
-            page = next_page
-            next_page += 1
-
-            resp = await github.request(
-                "GET",
-                f"/orgs/{org}/repos",
-                params={
-                    "per_page": 100,
-                    "page": page,
-                    # asc+created to prevent repos getting lost between pages...
-                    "sort": "created",
-                    "direction": "asc",
-                },
-            )
-            data = await resp.json()
-
-            if not data:
-                max_existing = min(max_existing, page - 1)
-
-            matching_repos = [r["name"] for r in data if r["name"].startswith(prefix)]
-            repos.extend(matching_repos)
-            if progress is not None:
-                progress.scanned += len(data)
-                progress.found += len(matching_repos)
-
-    await asyncio.gather(*(worker() for _ in range(GITHUB_WORKERS)))
     return repos
 
 
@@ -104,11 +77,13 @@ async def merge_upstream(
     return success, failed
 
 
-async def run_sync(prefix: str, progress: SyncProgress | None = None) -> tuple[int, int, int]:
-    """Run full sync for prefix. Returns (total, success, failed)."""
+async def run_sync(lab_name: str, progress: SyncProgress | None = None) -> tuple[int, int, int]:
+    """Run full sync for a lab. Returns (total, success, failed)."""
+
+    template_repo = get_template_repo_name(lab_name)
 
     async with GitHubClient(config.github_token) as github:
-        repos = await fetch_repos(github, config.github_org, prefix, progress)
+        repos = await fetch_forks(github, config.github_org, template_repo, progress)
         total = len(repos)
         if progress is not None:
             progress.total = total

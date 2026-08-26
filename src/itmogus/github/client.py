@@ -1,5 +1,6 @@
 import logging
-from typing import Self
+from collections.abc import AsyncIterator, Mapping
+from typing import Any, Self
 
 from aiohttp import ClientError, ClientResponseError, ClientSession, ClientTimeout
 from tenacity import (
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 API_URL = "https://api.github.com"
 MAX_RETRIES = 3
+PAGE_SIZE = 100
 
 
 class GitHubClient:
@@ -89,3 +91,29 @@ class GitHubClient:
             return resp
 
         return await _request()
+
+    # GitHub does not have any pagination API.
+    # Something may get lost if it's modified during fetch. Let's just hope that it won't.
+    async def paginate(
+        self,
+        path: str,
+        params: Mapping[str, Any] | None = None,
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        page = 1
+        base_params = dict(params or {})
+
+        while True:
+            response = await self.request(
+                "GET",
+                path,
+                params={**base_params, "per_page": PAGE_SIZE, "page": page},
+            )
+            items = await response.json()
+            if not items:
+                return
+
+            yield items
+
+            if len(items) < PAGE_SIZE:
+                return
+            page += 1

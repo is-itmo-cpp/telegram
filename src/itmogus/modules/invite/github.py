@@ -4,6 +4,7 @@ from datetime import datetime
 
 from itmogus.core.config import config
 from itmogus.github import GitHubClient, GitHubError, GitHubNotFoundError
+from itmogus.labs import get_student_repo_name, get_template_repo_name
 from itmogus.modules.invite.errors import InviteError
 from itmogus.result import Fail, Ok, Result
 
@@ -125,26 +126,18 @@ async def get_user_invitation(
     return None
 
 
-def _get_template_name(template_name: str) -> str:
-    return f"{config.github_classroom}-{template_name}-{template_name}"
-
-
-def _get_repo_name(template_name: str, github_username: str) -> str:
-    return f"{template_name}-{github_username}"
-
-
 async def ensure_invitation(
     template_name: str,
     github_username: str,
 ) -> Result[EnsureStatus, InviteError]:
-    repo = _get_repo_name(template_name, github_username)
+    repo = get_student_repo_name(template_name, github_username)
 
     try:
         async with GitHubClient(config.github_token) as github:
             visibility = await get_repo_visibility(github, config.github_org, repo)
 
             if visibility is None:
-                template = _get_template_name(template_name)
+                template = get_template_repo_name(template_name)
                 template_visibility = await get_repo_visibility(github, config.github_org, template)
 
                 if template_visibility is None:

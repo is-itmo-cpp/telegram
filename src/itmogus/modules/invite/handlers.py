@@ -4,6 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from itmogus.labs import resolve_lab_name
 from itmogus.modules.invite.errors import InviteError
 from itmogus.modules.invite.github import ensure_invitation, EnsureStatus
 from itmogus.modules.users.repository import UserRepository
@@ -17,20 +18,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-ALLOWED_TEMPLATE_NAMES = {"livecoding2"}
-
-
-def _resolve_template_name(user_input: str) -> str | None:
-    if user_input.isdigit():
-        num = int(user_input)
-        if num < 1:
-            return None
-        return f"labwork{num}"
-    if user_input in ALLOWED_TEMPLATE_NAMES:
-        return user_input
-    return None
-
-
 @router.message(Command("invite"), F.chat.type == "private")
 async def cmd_invite(message: Message, sheets: SheetsClient):
     if message.from_user is None:
@@ -41,7 +28,7 @@ async def cmd_invite(message: Message, sheets: SheetsClient):
         await message.answer("📝 Использование: /invite <lab>\n\nПример: /invite 1")
         return
 
-    template_name = _resolve_template_name(args[1].strip())
+    template_name = resolve_lab_name(args[1])
     if template_name is None:
         await message.answer("❌ Укажите положительное число или название (например: /invite 1, /invite livecoding2).")
         return

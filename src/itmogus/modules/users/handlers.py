@@ -61,7 +61,7 @@ async def cmd_start(message: Message, sheets: SheetsClient):
     if role in (Role.TEAM, Role.OWNER):
         commands.append("📋 /give <ИСУ> — выдать задачу")
         commands.append("📊 /exam — статус экзамена")
-        commands.append("🔄 /sync <prefix> — синхронизация репозиториев")
+        commands.append("🔄 /sync <lab> — синхронизация репозиториев")
 
     if role == Role.OWNER:
         commands.append("⚙️ /status — конфигурация бота")
