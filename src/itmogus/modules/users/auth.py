@@ -1,7 +1,7 @@
 from enum import Enum
 
 from aiogram.filters import BaseFilter
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from itmogus.core.config import config
 from itmogus.modules.users.repository import UserRepository
@@ -34,8 +34,8 @@ class HasRole(BaseFilter):
     def __init__(self, min_role: Role):
         self.min_role = min_role
 
-    async def __call__(self, message: Message, sheets: SheetsClient) -> bool:
-        user = message.from_user
+    async def __call__(self, event: Message | CallbackQuery, sheets: SheetsClient) -> bool:
+        user = event.from_user
         if user is None:
             return False
 
@@ -49,5 +49,8 @@ class HasRole(BaseFilter):
             allowed = is_owner(user_id) or await is_team(user_id, users)
 
         if not allowed:
-            await message.answer("У вас нет доступа к этой команде.")
+            if isinstance(event, CallbackQuery):
+                await event.answer("У вас нет доступа к этой команде.", show_alert=True)
+            else:
+                await event.answer("У вас нет доступа к этой команде.")
         return allowed

@@ -151,7 +151,7 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
     )
 
 
-@router.callback_query(TaskCallback.filter())
+@router.callback_query(TaskCallback.filter(), HasRole(Role.TEAM))
 async def callback_select_task(
     callback: CallbackQuery,
     callback_data: TaskCallback,
