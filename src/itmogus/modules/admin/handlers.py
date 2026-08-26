@@ -73,8 +73,8 @@ async def cmd_log(message: Message):
                 Usage: `/logs [criteria] [count]`
 
                 **Examples:**
-                `/logs` - Last 20 logs
-                `/logs 50` - Last 50 logs
+                `/logs` - Show this help
+                `/logs 20` - Last 20 logs
                 `/logs error` - Last 20 errors
                 `/logs warning 30` - Last 30 warnings
                 `/logs user:123456` - Last 20 logs from user 123456
