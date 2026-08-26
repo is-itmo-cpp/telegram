@@ -6,12 +6,38 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from itmogus.modules.sync.github import run_sync
+from itmogus.modules.sync.github import run_sync, SyncProgress
 from itmogus.modules.users.auth import HasRole, Role
+from itmogus.progress import render_progress_bar, run_with_progress
 
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def _render_sync_progress(prefix: str, progress: SyncProgress) -> str:
+    if progress.total is None:
+        return dedent(
+            f"""\
+            🔍 Ищу репозитории...
+
+            📂 Префикс: `{prefix}`
+            🔎 Проверено: {progress.scanned}
+            📊 Найдено: {progress.found}
+            """
+        ).strip()
+
+    bar = render_progress_bar(progress.completed, progress.total)
+    return dedent(
+        f"""\
+        🔄 Синхронизирую репозитории...
+
+        📂 Префикс: `{prefix}`
+        {bar} {progress.completed}/{progress.total}
+        ✅ Успешно: {progress.success}
+        ❌ Ошибки: {progress.failed}
+        """
+    ).strip()
 
 
 @router.message(Command("sync"), HasRole(Role.TEAM))
@@ -25,13 +51,19 @@ async def cmd_sync(message: Message):
     if not prefix.endswith("-"):
         prefix += "-"
 
-    status_msg = await message.answer(
-        f"🔄 Синхронизирую репозитории с префиксом `{prefix}`...",
-        parse_mode="Markdown",
-    )
+    progress = SyncProgress()
+    status_msg = await message.answer(_render_sync_progress(prefix, progress), parse_mode="Markdown")
 
     try:
-        total, success, failed = await asyncio.wait_for(run_sync(prefix), timeout=600)
+        total, success, failed = await asyncio.wait_for(
+            run_with_progress(
+                status_msg,
+                run_sync(prefix, progress),
+                lambda: _render_sync_progress(prefix, progress),
+                parse_mode="Markdown",
+            ),
+            timeout=600,
+        )
     except asyncio.TimeoutError:
         logger.warning("Sync timed out for prefix '%s'", prefix)
         await status_msg.edit_text("⏱ Синхронизация превысила таймаут (10 минут)")
@@ -48,10 +80,11 @@ async def cmd_sync(message: Message):
             f"""\
             ✅ Синхронизация завершена
 
-            📂 Префикс: {prefix}
+            📂 Префикс: `{prefix}`
             📊 Всего: {total}
             ✅ Успешно: {success}
             ❌ Ошибки: {failed}
             """
-        ).strip()
+        ).strip(),
+        parse_mode="Markdown",
     )

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 
 from itmogus.core.config import config
 from itmogus.github import GitHubClient, GitHubError
@@ -10,9 +11,27 @@ logger = logging.getLogger(__name__)
 GITHUB_WORKERS = 16
 
 
+@dataclass
+class SyncProgress:
+    scanned: int = 0
+    found: int = 0
+    total: int | None = None
+    success: int = 0
+    failed: int = 0
+
+    @property
+    def completed(self) -> int:
+        return self.success + self.failed
+
+
 # GitHub does not have any pagination API.
 # Repos may get lost if somebody deletes their repo during fetch. Let's just hope that they won't.
-async def fetch_repos(github: GitHubClient, org: str, prefix: str) -> list[str]:
+async def fetch_repos(
+    github: GitHubClient,
+    org: str,
+    prefix: str,
+    progress: SyncProgress | None = None,
+) -> list[str]:
     next_page = 1
     max_existing = float("inf")
     repos = []
@@ -41,13 +60,23 @@ async def fetch_repos(github: GitHubClient, org: str, prefix: str) -> list[str]:
             if not data:
                 max_existing = min(max_existing, page - 1)
 
-            repos.extend(r["name"] for r in data if r["name"].startswith(prefix))
+            matching_repos = [r["name"] for r in data if r["name"].startswith(prefix)]
+            repos.extend(matching_repos)
+            if progress is not None:
+                progress.scanned += len(data)
+                progress.found += len(matching_repos)
 
     await asyncio.gather(*(worker() for _ in range(GITHUB_WORKERS)))
     return repos
 
 
-async def merge_upstream(github: GitHubClient, org: str, repos: list[str], branch: str) -> tuple[int, int]:
+async def merge_upstream(
+    github: GitHubClient,
+    org: str,
+    repos: list[str],
+    branch: str,
+    progress: SyncProgress | None = None,
+) -> tuple[int, int]:
     success = 0
     failed = 0
 
@@ -63,19 +92,31 @@ async def merge_upstream(github: GitHubClient, org: str, repos: list[str], branc
                     json={"branch": branch},
                 )
                 success += 1
+                if progress is not None:
+                    progress.success += 1
             except GitHubError as e:
                 failed += 1
+                if progress is not None:
+                    progress.failed += 1
                 logger.warning("Failed to sync repo %s: %s", repo, e)
 
     await asyncio.gather(*(_worker() for _ in range(GITHUB_WORKERS)))
     return success, failed
 
 
-async def run_sync(prefix: str) -> tuple[int, int, int]:
+async def run_sync(prefix: str, progress: SyncProgress | None = None) -> tuple[int, int, int]:
     """Run full sync for prefix. Returns (total, success, failed)."""
 
     async with GitHubClient(config.github_token) as github:
-        repos = await fetch_repos(github, config.github_org, prefix)
+        repos = await fetch_repos(github, config.github_org, prefix, progress)
         total = len(repos)
-        success, failed = await merge_upstream(github, config.github_org, repos, config.github_branch)
+        if progress is not None:
+            progress.total = total
+        success, failed = await merge_upstream(
+            github,
+            config.github_org,
+            repos,
+            config.github_branch,
+            progress,
+        )
         return total, success, failed
