@@ -34,6 +34,7 @@ async def register_commands(bot: Bot) -> None:
         BotCommand(command="exam_logs", description="Настроить таблицу сдачи"),
         BotCommand(command="exam_end", description="Завершить экзамен"),
         BotCommand(command="sync", description="Синхронизация репозиториев"),
+        BotCommand(command="rollout", description="Создать репозитории для лабораторной"),
         BotCommand(command="status", description="Просмотр конфигурации"),
         BotCommand(command="logs", description="Просмотр логов"),
         BotCommand(command="reload", description="Сброс кэша"),
