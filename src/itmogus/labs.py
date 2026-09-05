@@ -1,6 +1,3 @@
-from itmogus.core.config import config
-
-
 ALLOWED_LAB_NAMES = {"livecoding2"}
 
 
@@ -26,7 +23,7 @@ def resolve_lab_name(user_input: str) -> str | None:
 
 
 def get_template_repo_name(lab_name: str) -> str:
-    return f"{config.github_classroom}-{lab_name}-{lab_name}"
+    return lab_name
 
 
 def get_student_repo_name(lab_name: str, github_username: str) -> str:
