@@ -1,4 +1,4 @@
-ALLOWED_LAB_NAMES = {"livecoding2"}
+ALLOWED_LAB_NAMES = {"livecoding1", "livecoding2"}
 
 
 def resolve_lab_name(user_input: str) -> str | None:
