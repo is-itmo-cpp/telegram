@@ -253,29 +253,8 @@ async def ensure_invitation(
             visibility = await get_repo_visibility(github, config.github_org, repo)
 
             if visibility is None:
-                template = get_template_repo_name(template_name)
-                template_visibility = await get_repo_visibility(github, config.github_org, template)
-
-                if template_visibility is None:
-                    logger.warning("Template not found: %s/%s", config.github_org, template)
-                    return Fail(InviteError.TEMPLATE_NOT_FOUND)
-
-                if template_visibility != "private":
-                    logger.warning("Template is not private: %s/%s", config.github_org, template)
-                    return Fail(InviteError.TEMPLATE_NOT_PRIVATE)
-
-                success = await fork_repo(
-                    github,
-                    config.github_org,
-                    template,
-                    config.github_org,
-                    repo,
-                )
-                if not success:
-                    logger.warning("Failed to fork template: %s -> %s", template, repo)
-                    return Fail(InviteError.FORK_FAILED)
-
-                logger.info("Forked template %s -> %s", template, repo)
+                logger.warning("Student repo not found: %s/%s", config.github_org, repo)
+                return Fail(InviteError.REPO_NOT_FOUND)
 
             existing = await get_user_invitation(github, config.github_org, repo, github_username)
 
@@ -292,4 +271,4 @@ async def ensure_invitation(
             return Ok(EnsureStatus.InvitationCreated(new_inv))
     except GitHubError:
         logger.exception("GitHub error during invitation")
-        return Fail(InviteError.FORK_FAILED)
+        return Fail(InviteError.GITHUB_ERROR)

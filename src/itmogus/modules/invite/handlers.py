@@ -268,11 +268,11 @@ async def cmd_invite(message: Message, sheets: SheetsClient):
             await message.answer(f"📧 У вас уже есть активное приглашение: {invitation.html_url}")
         case Ok(EnsureStatus.RepoExists(url)):
             await message.answer(f"✅ Вы уже имеете доступ к репозиторию: {url}.")
-        case Fail(InviteError.TEMPLATE_NOT_FOUND):
-            await message.answer("❌ Шаблон репозитория не найден. Обратитесь к преподавателю.")
-        case Fail(InviteError.TEMPLATE_NOT_PRIVATE):
-            await message.answer("❌ Шаблон репозитория должен быть приватным. Обратитесь к преподавателю.")
-        case Fail(InviteError.FORK_FAILED):
-            await message.answer("❌ Не удалось создать репозиторий. Попробуйте позже.")
+        case Fail(InviteError.REPO_NOT_FOUND):
+            await message.answer(
+                "❌ Репозиторий для этой лабораторной ещё не создан. Обратитесь к преподавателю."
+            )
+        case Fail(InviteError.GITHUB_ERROR):
+            await message.answer("❌ Ошибка GitHub. Попробуйте позже.")
         case Fail(error):
             await message.answer(f"❌ Произошла ошибка: {error}.")
