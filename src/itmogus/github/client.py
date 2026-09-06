@@ -33,6 +33,8 @@ PAGE_SIZE = 100
 MAX_RATE_LIMIT_RETRIES = 5
 MAX_RATE_LIMIT_WAIT = 30 * 60
 DEFAULT_RATE_LIMIT_WAIT = 60
+RATE_LIMIT_STATUSES = (403, 422, 429)
+RATE_LIMIT_PHRASES = ("rate limit", "too quickly", "abuse")
 
 
 async def _error_message(resp: ClientResponse) -> str:
@@ -41,13 +43,19 @@ async def _error_message(resp: ClientResponse) -> str:
         data = json.loads(text)
     except ValueError:
         return text[:200]
-    if isinstance(data, dict) and "message" in data:
-        return str(data["message"])
-    return text[:200]
+    if not isinstance(data, dict):
+        return text[:200]
+    parts = [str(data.get("message", ""))]
+    for error in data.get("errors", []):
+        if isinstance(error, dict) and "message" in error:
+            parts.append(str(error["message"]))
+        elif isinstance(error, str):
+            parts.append(error)
+    return "; ".join(part for part in parts if part) or text[:200]
 
 
 async def _rate_limit_delay(resp: ClientResponse) -> float | None:
-    if resp.status not in (403, 429):
+    if resp.status not in RATE_LIMIT_STATUSES:
         return None
 
     retry_after = resp.headers.get("retry-after")
@@ -66,7 +74,8 @@ async def _rate_limit_delay(resp: ClientResponse) -> float | None:
     if resp.status == 429:
         return DEFAULT_RATE_LIMIT_WAIT
 
-    if "rate limit" in (await _error_message(resp)).lower():
+    message = (await _error_message(resp)).lower()
+    if any(phrase in message for phrase in RATE_LIMIT_PHRASES):
         return DEFAULT_RATE_LIMIT_WAIT
 
     return None

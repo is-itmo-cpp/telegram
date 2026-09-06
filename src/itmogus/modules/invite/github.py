@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +13,9 @@ from itmogus.result import Fail, Ok, Result
 
 
 logger = logging.getLogger(__name__)
+
+# https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api?apiVersion=2026-03-10#pause-between-mutative-requests
+WRITE_INTERVAL = 1.0
 
 
 @dataclass
@@ -218,6 +222,7 @@ async def run_rollout(
                 progress.fork_errors += 1
                 logger.warning("Failed to fork template: %s -> %s", template_repo, repo)
             progress.completed += 1
+            await asyncio.sleep(WRITE_INTERVAL)
 
         # Phase 3. Enable Actions & send invitations
         progress.phase = RolloutPhase.SENDING_INVITATIONS
@@ -231,6 +236,7 @@ async def run_rollout(
             except GitHubError:
                 progress.actions_errors += 1
                 logger.warning("Failed to enable Actions on %s", repo)
+            await asyncio.sleep(WRITE_INTERVAL)
 
             try:
                 invitation = await add_collaborator(github, config.github_org, repo, username)
@@ -242,6 +248,7 @@ async def run_rollout(
                 progress.invitation_errors += 1
                 logger.warning("Failed to invite %s to %s", username, repo)
             progress.completed += 1
+            await asyncio.sleep(WRITE_INTERVAL)
 
     return None
 
