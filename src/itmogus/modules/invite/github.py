@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,8 +12,6 @@ from itmogus.result import Fail, Ok, Result
 
 
 logger = logging.getLogger(__name__)
-
-GITHUB_WORKERS = 16
 
 
 @dataclass
@@ -205,54 +202,46 @@ async def run_rollout(
         progress.completed = progress.forks_existing
 
         # Phase 2. Create missing forks
-        async def fork_worker() -> None:
-            while missing_forks:
-                username = missing_forks.pop()
-                repo = get_student_repo_name(template_name, username)
-                success = await fork_repo(
-                    github,
-                    config.github_org,
-                    template_repo,
-                    config.github_org,
-                    repo,
-                )
-                if success:
-                    progress.forks_created += 1
-                    logger.info("Forked template %s -> %s", template_repo, repo)
-                else:
-                    progress.fork_errors += 1
-                    logger.warning("Failed to fork template: %s -> %s", template_repo, repo)
-                progress.completed += 1
+        for username in missing_forks:
+            repo = get_student_repo_name(template_name, username)
+            success = await fork_repo(
+                github,
+                config.github_org,
+                template_repo,
+                config.github_org,
+                repo,
+            )
+            if success:
+                progress.forks_created += 1
+                logger.info("Forked template %s -> %s", template_repo, repo)
+            else:
+                progress.fork_errors += 1
+                logger.warning("Failed to fork template: %s -> %s", template_repo, repo)
+            progress.completed += 1
 
-        await asyncio.gather(*(fork_worker() for _ in range(GITHUB_WORKERS)))
-
-        # Phase 3. Send invitations
-        pending_invitations = github_usernames.copy()
+        # Phase 3. Enable Actions & send invitations
         progress.phase = RolloutPhase.SENDING_INVITATIONS
-        progress.total = len(pending_invitations)
+        progress.total = len(github_usernames)
         progress.completed = 0
 
-        async def invitation_worker() -> None:
-            while pending_invitations:
-                username = pending_invitations.pop()
-                repo = get_student_repo_name(template_name, username)
-                try:
-                    await enable_actions(github, config.github_org, repo)
-                except GitHubError:
-                    progress.actions_errors += 1
-                    logger.warning("Failed to enable Actions on %s", repo)
-                try:
-                    invitation = await add_collaborator(github, config.github_org, repo, username)
-                    if invitation is None:
-                        progress.already_accessible += 1
-                    else:
-                        progress.invitations_sent += 1
-                except GitHubError:
-                    progress.invitation_errors += 1
-                    logger.warning("Failed to invite %s to %s", username, repo)
-                progress.completed += 1
+        for username in github_usernames:
+            repo = get_student_repo_name(template_name, username)
+            try:
+                await enable_actions(github, config.github_org, repo)
+            except GitHubError:
+                progress.actions_errors += 1
+                logger.warning("Failed to enable Actions on %s", repo)
 
-        await asyncio.gather(*(invitation_worker() for _ in range(GITHUB_WORKERS)))
+            try:
+                invitation = await add_collaborator(github, config.github_org, repo, username)
+                if invitation is None:
+                    progress.already_accessible += 1
+                else:
+                    progress.invitations_sent += 1
+            except GitHubError:
+                progress.invitation_errors += 1
+                logger.warning("Failed to invite %s to %s", username, repo)
+            progress.completed += 1
 
     return None
 

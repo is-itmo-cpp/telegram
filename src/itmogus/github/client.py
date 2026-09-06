@@ -1,8 +1,11 @@
+import asyncio
+import json
 import logging
+import time
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, Self
 
-from aiohttp import ClientError, ClientResponseError, ClientSession, ClientTimeout
+from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 from tenacity import (
     before_sleep_log,
     retry,
@@ -25,6 +28,48 @@ logger = logging.getLogger(__name__)
 API_URL = "https://api.github.com"
 MAX_RETRIES = 3
 PAGE_SIZE = 100
+
+# https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api?apiVersion=2026-03-10#handle-rate-limit-errors-appropriately
+MAX_RATE_LIMIT_RETRIES = 5
+MAX_RATE_LIMIT_WAIT = 30 * 60
+DEFAULT_RATE_LIMIT_WAIT = 60
+
+
+async def _error_message(resp: ClientResponse) -> str:
+    text = await resp.text()
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text[:200]
+    if isinstance(data, dict) and "message" in data:
+        return str(data["message"])
+    return text[:200]
+
+
+async def _rate_limit_delay(resp: ClientResponse) -> float | None:
+    if resp.status not in (403, 429):
+        return None
+
+    retry_after = resp.headers.get("retry-after")
+    if retry_after is not None:
+        try:
+            return max(float(retry_after), 1.0)
+        except ValueError:
+            return DEFAULT_RATE_LIMIT_WAIT
+
+    if resp.headers.get("x-ratelimit-remaining") == "0":
+        try:
+            return max(int(resp.headers["x-ratelimit-reset"]) - time.time(), 1.0)
+        except KeyError, ValueError:
+            return DEFAULT_RATE_LIMIT_WAIT
+
+    if resp.status == 429:
+        return DEFAULT_RATE_LIMIT_WAIT
+
+    if "rate limit" in (await _error_message(resp)).lower():
+        return DEFAULT_RATE_LIMIT_WAIT
+
+    return None
 
 
 class GitHubClient:
@@ -55,42 +100,51 @@ class GitHubClient:
     async def __aexit__(self, *args) -> None:
         await self.close()
 
-    async def request(self, method: str, path: str, **kwargs):
-        @retry(
-            reraise=True,
-            stop=stop_after_attempt(MAX_RETRIES + 1),
-            wait=wait_exponential(multiplier=1, min=1, max=8),
-            retry=retry_if_exception_type((GitHubConnectionError, GitHubRateLimitError)),
-            before_sleep=before_sleep_log(logger, logging.WARNING),  # type: ignore[invalid-argument-type]
-        )
-        async def _request():
-            session = await self._get_session()
-            try:
-                resp = await session.request(method, path, **kwargs)
-            except ClientError as e:
-                logger.warning("GitHub network error: %s %s: %s", method, path, e)
-                raise GitHubConnectionError() from e
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(MAX_RETRIES + 1),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception_type(GitHubConnectionError),
+        before_sleep=before_sleep_log(logger, logging.WARNING),  # type: ignore[invalid-argument-type]
+    )
+    async def _send(self, method: str, path: str, **kwargs) -> ClientResponse:
+        session = await self._get_session()
+        try:
+            return await session.request(method, path, **kwargs)
+        except ClientError as e:
+            logger.warning("GitHub network error: %s %s: %s", method, path, e)
+            raise GitHubConnectionError() from e
 
-            # https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2026-03-10#exceeding-the-rate-limit
-            if resp.status in (403, 429) and resp.headers.get("x-ratelimit-remaining") == "0":
-                # TODO: respect x-ratelimit-reset?
-                logger.warning("GitHub rate limit exceeded: %s %s", method, path)
+    async def request(self, method: str, path: str, **kwargs) -> ClientResponse:
+        for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+            resp = await self._send(method, path, **kwargs)
+
+            delay = await _rate_limit_delay(resp)
+            if delay is None:
+                return await self._check(resp, method, path)
+
+            if attempt == MAX_RATE_LIMIT_RETRIES or delay > MAX_RATE_LIMIT_WAIT:
+                logger.error("GitHub rate limit exceeded: %s %s (would wait %.0fs)", method, path, delay)
                 raise GitHubRateLimitError()
 
-            try:
-                resp.raise_for_status()
-            except ClientResponseError as e:
-                if e.status == 404:
-                    logger.error("GitHub API not found: %s %s", method, path)
-                    raise GitHubNotFoundError() from e
-                if e.status == 403:
-                    logger.error("GitHub API permission error: %s %s", method, path)
-                    raise GitHubPermissionError() from e
-                logger.error("GitHub API error: %s %s -> %d", method, path, e.status)
-                raise GitHubAPIError() from e
+            logger.warning("GitHub rate limit hit: %s %s, retrying in %.0fs", method, path, delay)
+            await asyncio.sleep(delay)
+
+        raise GitHubRateLimitError()
+
+    async def _check(self, resp: ClientResponse, method: str, path: str) -> ClientResponse:
+        if resp.status < 400:
             return resp
 
-        return await _request()
+        message = await _error_message(resp)
+        if resp.status == 404:
+            logger.error("GitHub API not found: %s %s: %s", method, path, message)
+            raise GitHubNotFoundError()
+        if resp.status == 403:
+            logger.error("GitHub API permission error: %s %s: %s", method, path, message)
+            raise GitHubPermissionError()
+        logger.error("GitHub API error: %s %s -> %d: %s", method, path, resp.status, message)
+        raise GitHubAPIError()
 
     # GitHub does not have any pagination API.
     # Something may get lost if it's modified during fetch. Let's just hope that it won't.
