@@ -72,6 +72,7 @@ def _render_rollout_progress(lab_name: str, progress: RolloutProgress) -> str:
                 📨 Отправлено: {progress.invitations_sent}
                 ✅ Доступ уже был: {progress.already_accessible}
                 ❌ Ошибки: {progress.invitation_errors}
+                ⚙️ Ошибки включения Actions: {progress.actions_errors}
                 """
             ).strip()
 
@@ -94,6 +95,7 @@ def _render_rollout_result(lab_name: str, progress: RolloutProgress) -> str:
         📨 Приглашений отправлено: {progress.invitations_sent}
         ✅ Доступ уже был: {progress.already_accessible}
         ❌ Ошибки приглашений: {progress.invitation_errors}
+        ⚙️ Ошибки включения Actions: {progress.actions_errors}
         """
     ).strip()
 

@@ -76,6 +76,7 @@ class RolloutProgress:
     invitations_sent: int = 0
     already_accessible: int = 0
     invitation_errors: int = 0
+    actions_errors: int = 0
 
 
 async def get_repo_visibility(github: GitHubClient, org: str, repo: str) -> str | None:
@@ -107,6 +108,15 @@ async def fork_repo(
         return resp.status == 202
     except GitHubError:
         return False
+
+
+# GitHub disables Actions on forks by default.
+async def enable_actions(github: GitHubClient, org: str, repo: str) -> None:
+    await github.request(
+        "PUT",
+        f"/repos/{org}/{repo}/actions/permissions",
+        json={"enabled": True, "allowed_actions": "all"},
+    )
 
 
 async def get_invitations(github: GitHubClient, org: str, repo: str) -> list[Invitation]:
@@ -226,6 +236,11 @@ async def run_rollout(
             while pending_invitations:
                 username = pending_invitations.pop()
                 repo = get_student_repo_name(template_name, username)
+                try:
+                    await enable_actions(github, config.github_org, repo)
+                except GitHubError:
+                    progress.actions_errors += 1
+                    logger.warning("Failed to enable Actions on %s", repo)
                 try:
                     invitation = await add_collaborator(github, config.github_org, repo, username)
                     if invitation is None:
