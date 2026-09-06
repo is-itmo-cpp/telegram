@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from textwrap import dedent
 from typing import TypeGuard
@@ -7,16 +8,14 @@ from zoneinfo import ZoneInfo
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.exceptions import AiogramError
-from aiogram.filters.callback_data import CallbackData
-from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
-    InlineKeyboardButton,
     InlineKeyboardMarkup,
     LinkPreviewOptions,
     Message,
 )
 
+from itmogus.core.actions import CANCEL, Action, PendingActions, action_button
 from itmogus.core.storage import Storage
 from itmogus.modules.exam.errors import ExamConfigError
 from itmogus.modules.exam.repository import ExamRepository
@@ -39,26 +38,22 @@ EXAM_ERROR_MESSAGES = {
 }
 
 
-class TaskCallback(CallbackData, prefix="task"):
-    task_id: str
+@dataclass(frozen=True)
+class GivePayload:
+    student_isu: int
+    student_name: str
+    student_group: str
+    room: str
 
 
 def is_accessible_message(msg) -> TypeGuard[Message]:
     return isinstance(msg, Message)
 
 
-async def get_tasks_keyboard(exams: ExamRepository) -> InlineKeyboardMarkup:
+async def get_tasks_keyboard(exams: ExamRepository, token: str) -> InlineKeyboardMarkup:
     tasks = await exams.get_all_tasks()
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text=f"{task.name} ({task.points})",
-                callback_data=TaskCallback(task_id=task.id).pack(),
-            )
-        ]
-        for task in tasks.values()
-    ]
-    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
+    buttons = [[action_button(f"{task.name} ({task.points})", token, choice=task.id)] for task in tasks.values()]
+    buttons.append([action_button("❌ Отмена", token, choice=CANCEL)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -95,7 +90,7 @@ async def cmd_room(message: Message, sheets: SheetsClient, storage: Storage):
 
 
 @router.message(Command("give"), HasRole(Role.TEAM))
-async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, storage: Storage):
+async def cmd_give(message: Message, sheets: SheetsClient, storage: Storage, actions: PendingActions):
     args = (message.text or "").split(maxsplit=1)
     if len(args) < 2:
         await message.answer("📝 Использование: /give <ИСУ>")
@@ -132,8 +127,9 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
     registered_user = await users.get_user_by_isu(student.isu)
     header = "🎓 Студент найден" if registered_user else "⚠️ Студент не зарегистрирован в Telegram"
 
-    keyboard = await get_tasks_keyboard(exams)
-    await state.update_data(student_isu=student.isu, student_name=student.name, student_group=student.group, room=room)
+    payload = GivePayload(student_isu=student.isu, student_name=student.name, student_group=student.group, room=room)
+    token = actions.create(owner_id=message.from_user.id, payload=payload)
+    keyboard = await get_tasks_keyboard(exams, token)
     await message.answer(
         dedent(
             f"""\
@@ -151,38 +147,35 @@ async def cmd_give(message: Message, state: FSMContext, sheets: SheetsClient, st
     )
 
 
-@router.callback_query(TaskCallback.filter(), HasRole(Role.TEAM))
+@router.callback_query(Action(GivePayload), HasRole(Role.TEAM))
 async def callback_select_task(
     callback: CallbackQuery,
-    callback_data: TaskCallback,
-    state: FSMContext,
+    payload: GivePayload,
+    choice: str,
     sheets: SheetsClient,
     storage: Storage,
 ):
-    data = await state.get_data()
-    student_isu = data.get("student_isu")
-    student_name = data.get("student_name")
-    student_group = data.get("student_group", "")
-    room = data.get("room", "")
-
-    if not student_isu or not student_name:
-        await callback.answer("Ошибка: данные выдачи потеряны")
+    if choice == CANCEL:
+        if is_accessible_message(callback.message):
+            await callback.message.edit_text("❌ Отменено")
+        await callback.answer()
         return
 
     exams = ExamRepository(sheets, storage)
     all_tasks = await exams.get_all_tasks()
-    task = all_tasks.get(callback_data.task_id)
+    task = all_tasks.get(choice)
     if not task:
-        await callback.answer("Задача не найдена")
+        await callback.answer("Задача не найдена. Повторите команду.", show_alert=True)
+        if is_accessible_message(callback.message):
+            await callback.message.edit_reply_markup(reply_markup=None)
         return
 
+    student_isu = payload.student_isu
+    student_name = payload.student_name
+    room = payload.room
     timestamp = datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
 
-    if not room:
-        await callback.answer("Ошибка: аудитория не выбрана")
-        return
-
-    await exams.log_exam(student_isu, student_group, student_name, room, task.id, task.points, timestamp)
+    await exams.log_exam(student_isu, payload.student_group, student_name, room, task.id, task.points, timestamp)
 
     delivery_error = False
     users = UserRepository(sheets)
@@ -219,15 +212,6 @@ async def callback_select_task(
         await callback.message.edit_text(text)
 
     await callback.answer()
-    await state.clear()
-
-
-@router.callback_query(lambda c: c.data == "cancel")
-async def callback_cancel(callback: CallbackQuery, state: FSMContext):
-    if is_accessible_message(callback.message):
-        await callback.message.edit_text("❌ Отменено")
-    await callback.answer()
-    await state.clear()
 
 
 @router.message(Command("exam_tasks"), HasRole(Role.OWNER))

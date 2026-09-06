@@ -1,11 +1,12 @@
+from dataclasses import dataclass
 from textwrap import dedent
 from typing import TypeGuard
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.filters.callback_data import CallbackData
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, User
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
 
+from itmogus.core.actions import CANCEL, CONFIRM, Action, PendingActions, action_button
 from itmogus.modules.users.auth import Role, get_role, is_owner
 from itmogus.modules.users.repository import RegisterError, UserRepository
 from itmogus.result import Fail, Ok
@@ -15,9 +16,9 @@ from itmogus.sheets.sheet import SheetsClient
 router = Router()
 
 
-class RegisterCallback(CallbackData, prefix="register"):
+@dataclass(frozen=True)
+class RegisterPayload:
     isu: int
-    confirm: bool
 
 
 def is_accessible_message(msg) -> TypeGuard[Message]:
@@ -76,7 +77,7 @@ async def cmd_start(message: Message, sheets: SheetsClient):
 
 
 @router.message(Command("register"), F.chat.type == "private")
-async def cmd_register(message: Message, sheets: SheetsClient):
+async def cmd_register(message: Message, sheets: SheetsClient, actions: PendingActions):
     if message.from_user is None:
         return
 
@@ -105,17 +106,12 @@ async def cmd_register(message: Message, sheets: SheetsClient):
         await message.answer("❌ Студент с таким ИСУ не найден.")
         return
 
+    token = actions.create(owner_id=message.from_user.id, payload=RegisterPayload(isu=isu))
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="✅",
-                    callback_data=RegisterCallback(isu=isu, confirm=True).pack(),
-                ),
-                InlineKeyboardButton(
-                    text="❌",
-                    callback_data=RegisterCallback(isu=isu, confirm=False).pack(),
-                ),
+                action_button("✅", token, CONFIRM),
+                action_button("❌", token, CANCEL),
             ]
         ]
     )
@@ -125,16 +121,14 @@ async def cmd_register(message: Message, sheets: SheetsClient):
     )
 
 
-@router.callback_query(RegisterCallback.filter())
+@router.callback_query(Action(RegisterPayload))
 async def callback_register(
     callback: CallbackQuery,
-    callback_data: RegisterCallback,
+    payload: RegisterPayload,
+    choice: str,
     sheets: SheetsClient,
 ):
-    if callback.from_user is None:
-        return
-
-    if not callback_data.confirm:
+    if choice != CONFIRM:
         if is_accessible_message(callback.message):
             await callback.message.edit_text("❌ Регистрация отменена.")
         await callback.answer()
@@ -147,7 +141,7 @@ async def callback_register(
         RegisterError.NO_SUCH_ISU: "❌ Студент с таким ИСУ не найден.",
     }
 
-    match await users.register_user(callback.from_user.id, callback_data.isu):
+    match await users.register_user(callback.from_user.id, payload.isu):
         case Fail(error):
             if is_accessible_message(callback.message):
                 await callback.message.edit_text(error_messages[error])

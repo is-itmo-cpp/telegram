@@ -3,10 +3,10 @@ import logging
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 
 from itmogus.app.errors import setup_error_handlers
+from itmogus.core.actions import setup_actions
 from itmogus.core.config import config
 from itmogus.core.storage import Storage
 from itmogus.logging import ContextMiddleware, setup_logging
@@ -49,13 +49,14 @@ async def main():
     state = Storage(Path(config.storage_dir))
 
     bot = Bot(token=config.bot_token)
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = Dispatcher()
 
     dp.workflow_data["sheets"] = sheets_client
     dp.workflow_data["storage"] = state
 
     dp.message.middleware(ContextMiddleware())
     dp.callback_query.middleware(ContextMiddleware())
+    setup_actions(dp)
 
     setup_error_handlers(dp)
 
