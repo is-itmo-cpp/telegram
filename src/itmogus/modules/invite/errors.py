@@ -6,3 +6,4 @@ class InviteError(Enum):
     TEMPLATE_NOT_PRIVATE = "template_not_private"
     REPO_NOT_FOUND = "repo_not_found"
     GITHUB_ERROR = "github_error"
+    CANCELLED = "cancelled"

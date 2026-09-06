@@ -27,11 +27,18 @@ logger = logging.getLogger(__name__)
 
 
 router = Router()
-rollout_in_progress = False
+current_rollout: RolloutProgress | None = None
+
+ROLLOUT_CANCEL_TTL = 6 * 60 * 60
 
 
 @dataclass(frozen=True)
 class RolloutPayload:
+    lab_name: str
+
+
+@dataclass(frozen=True)
+class CancelRolloutPayload:
     lab_name: str
 
 
@@ -77,10 +84,10 @@ def _render_rollout_progress(lab_name: str, progress: RolloutProgress) -> str:
             ).strip()
 
 
-def _render_rollout_result(lab_name: str, progress: RolloutProgress) -> str:
+def _render_rollout_result(lab_name: str, progress: RolloutProgress, header: str = "✅ Rollout завершён") -> str:
     return dedent(
         f"""\
-        ✅ Rollout завершён
+        {header}
 
         🧪 Лабораторная: `{lab_name}`
         👥 Студентов: {progress.students}
@@ -105,7 +112,7 @@ async def cmd_rollout(message: Message, actions: PendingActions):
     if message.from_user is None:
         return
 
-    if rollout_in_progress:
+    if current_rollout is not None:
         await message.answer("⏳ Rollout уже выполняется. Дождитесь его завершения.")
         return
 
@@ -116,7 +123,9 @@ async def cmd_rollout(message: Message, actions: PendingActions):
 
     lab_name = resolve_lab_name(args[1])
     if lab_name is None:
-        await message.answer("❌ Укажите положительное число или название (например: /rollout 6, /rollout livecoding2).")
+        await message.answer(
+            "❌ Укажите положительное число или название (например: /rollout 6, /rollout livecoding2)."
+        )
         return
 
     token = actions.create(owner_id=message.from_user.id, payload=RolloutPayload(lab_name=lab_name))
@@ -145,8 +154,9 @@ async def callback_rollout(
     payload: RolloutPayload,
     choice: str,
     sheets: SheetsClient,
+    actions: PendingActions,
 ):
-    global rollout_in_progress
+    global current_rollout
 
     if not isinstance(callback.message, Message):
         await callback.answer()
@@ -159,11 +169,19 @@ async def callback_rollout(
 
     lab_name = payload.lab_name
 
-    if rollout_in_progress:
+    if current_rollout is not None:
         await callback.answer("Rollout уже выполняется. Дождитесь его завершения.", show_alert=True)
         return
 
-    rollout_in_progress = True
+    cancel_token = actions.create(
+        owner_id=callback.from_user.id,
+        payload=CancelRolloutPayload(lab_name=lab_name),
+        ttl=ROLLOUT_CANCEL_TTL,
+    )
+    cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[action_button("⛔ Остановить", cancel_token)]])
+
+    progress = RolloutProgress()
+    current_rollout = progress
     try:
         await callback.answer()
 
@@ -179,15 +197,14 @@ async def callback_rollout(
             github_usernames_by_key.setdefault(username.casefold(), username)
 
         github_usernames = list(github_usernames_by_key.values())
-        progress = RolloutProgress(
-            students=len(students),
-            github_accounts=len(github_usernames),
-            missing_github=len(students) - github_entries,
-            duplicate_github=github_entries - len(github_usernames),
-        )
+        progress.students = len(students)
+        progress.github_accounts = len(github_usernames)
+        progress.missing_github = len(students) - github_entries
+        progress.duplicate_github = github_entries - len(github_usernames)
         await callback.message.edit_text(
             _render_rollout_progress(lab_name, progress),
             parse_mode="Markdown",
+            reply_markup=cancel_keyboard,
         )
 
         try:
@@ -196,6 +213,7 @@ async def callback_rollout(
                 run_rollout(lab_name, github_usernames, progress),
                 lambda: _render_rollout_progress(lab_name, progress),
                 parse_mode="Markdown",
+                reply_markup=cancel_keyboard,
             )
         except Exception:
             logger.exception("Rollout failed for lab '%s'", lab_name)
@@ -207,13 +225,29 @@ async def callback_rollout(
                 await callback.message.edit_text("❌ Шаблон репозитория не найден.")
             case InviteError.TEMPLATE_NOT_PRIVATE:
                 await callback.message.edit_text("❌ Шаблон репозитория должен быть приватным.")
+            case InviteError.CANCELLED:
+                await callback.message.edit_text(
+                    _render_rollout_result(lab_name, progress, header="⛔ Rollout остановлен"),
+                    parse_mode="Markdown",
+                )
             case None:
                 await callback.message.edit_text(
                     _render_rollout_result(lab_name, progress),
                     parse_mode="Markdown",
                 )
     finally:
-        rollout_in_progress = False
+        current_rollout = None
+        actions.consume(cancel_token)
+
+
+@router.callback_query(Action(CancelRolloutPayload), HasRole(Role.TEAM))
+async def callback_cancel_rollout(callback: CallbackQuery, payload: CancelRolloutPayload, choice: str):
+    if current_rollout is None:
+        await callback.answer("Rollout уже завершён.")
+        return
+
+    current_rollout.cancel_requested = True
+    await callback.answer("⛔ Останавливаю rollout...")
 
 
 @router.message(Command("invite"), F.chat.type == "private")
@@ -257,9 +291,7 @@ async def cmd_invite(message: Message, sheets: SheetsClient):
         case Ok(EnsureStatus.RepoExists(url)):
             await message.answer(f"✅ Вы уже имеете доступ к репозиторию: {url}.")
         case Fail(InviteError.REPO_NOT_FOUND):
-            await message.answer(
-                "❌ Репозиторий для этой лабораторной ещё не создан. Обратитесь к преподавателю."
-            )
+            await message.answer("❌ Репозиторий для этой лабораторной ещё не создан. Обратитесь к преподавателю.")
         case Fail(InviteError.GITHUB_ERROR):
             await message.answer("❌ Ошибка GitHub. Попробуйте позже.")
         case Fail(error):

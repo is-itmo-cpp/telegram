@@ -78,6 +78,7 @@ class RolloutProgress:
     already_accessible: int = 0
     invitation_errors: int = 0
     actions_errors: int = 0
+    cancel_requested: bool = False
 
 
 async def get_repo_visibility(github: GitHubClient, org: str, repo: str) -> str | None:
@@ -207,6 +208,8 @@ async def run_rollout(
 
         # Phase 2. Create missing forks
         for username in missing_forks:
+            if progress.cancel_requested:
+                return InviteError.CANCELLED
             repo = get_student_repo_name(template_name, username)
             success = await fork_repo(
                 github,
@@ -230,6 +233,8 @@ async def run_rollout(
         progress.completed = 0
 
         for username in github_usernames:
+            if progress.cancel_requested:
+                return InviteError.CANCELLED
             repo = get_student_repo_name(template_name, username)
             try:
                 await enable_actions(github, config.github_org, repo)

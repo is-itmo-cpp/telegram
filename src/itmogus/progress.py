@@ -3,7 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardMarkup, Message
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ async def run_with_progress(
     *,
     interval: float = 1.0,
     parse_mode: str | None = None,
+    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> T:
     task = asyncio.ensure_future(operation)
     last_text = render()
@@ -43,7 +44,7 @@ async def run_with_progress(
 
             last_text = text
             try:
-                await status_message.edit_text(text, parse_mode=parse_mode)
+                await status_message.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
             except Exception:
                 logger.warning("Failed to update progress message", exc_info=True)
     finally:

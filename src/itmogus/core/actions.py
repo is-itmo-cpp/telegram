@@ -1,5 +1,6 @@
 import logging
 import secrets
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -10,7 +11,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import BaseFilter
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, TelegramObject
-from cachetools import TTLCache
 
 
 logger = logging.getLogger(__name__)
@@ -33,24 +33,43 @@ class ActionCallback(CallbackData, prefix="act"):
 class Ticket:
     owner_id: int
     payload: Any
+    expires_at: float
 
 
 class PendingActions:
-    def __init__(self, ttl: float = DEFAULT_TTL_SECONDS, maxsize: int = 10_000):
-        self._tickets: TTLCache[str, Ticket] = TTLCache(maxsize=maxsize, ttl=ttl)
+    def __init__(self, ttl: float = DEFAULT_TTL_SECONDS):
+        self._ttl = ttl
+        self._tickets: dict[str, Ticket] = {}
 
-    def create(self, owner_id: int, payload: Any) -> str:
+    def create(self, owner_id: int, payload: Any, ttl: float | None = None) -> str:
+        self._purge()
         token = secrets.token_urlsafe(12)
-        self._tickets[token] = Ticket(owner_id=owner_id, payload=payload)
+        expires_at = time.monotonic() + (self._ttl if ttl is None else ttl)
+        self._tickets[token] = Ticket(owner_id=owner_id, payload=payload, expires_at=expires_at)
         return token
 
     def peek(self, token: str) -> Ticket | None:
-        return self._tickets.get(token)
+        ticket = self._tickets.get(token)
+        if ticket is None:
+            return None
+        if ticket.expires_at <= time.monotonic():
+            del self._tickets[token]
+            return None
+        return ticket
 
     def consume(self, token: str) -> Ticket | None:
-        return self._tickets.pop(token, None)
+        ticket = self.peek(token)
+        if ticket is not None:
+            del self._tickets[token]
+        return ticket
+
+    def _purge(self) -> None:
+        now = time.monotonic()
+        for token in [token for token, ticket in self._tickets.items() if ticket.expires_at <= now]:
+            del self._tickets[token]
 
     def __len__(self) -> int:
+        self._purge()
         return len(self._tickets)
 
 
