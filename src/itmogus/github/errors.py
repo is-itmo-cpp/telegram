@@ -23,3 +23,7 @@ class GitHubPermissionError(GitHubError):
 
 class GitHubNotFoundError(GitHubError):
     user_message = "Ресурс не найден в GitHub."
+
+
+class GitHubAuthError(GitHubError):
+    user_message = "Ошибка авторизации GitHub App."

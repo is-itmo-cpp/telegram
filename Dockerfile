@@ -10,6 +10,7 @@ RUN uv sync --frozen --no-dev
 ENV STORAGE_DIR=/data/state
 ENV LOG_DIR=/data/logs
 ENV GOOGLE_CREDENTIALS_PATH=/data/credentials.json
+ENV GITHUB_APP_PRIVATE_KEY_PATH=/data/github-app.pem
 
 VOLUME ["/data"]
 

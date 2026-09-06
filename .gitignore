@@ -1,5 +1,6 @@
 .env
 credentials.json
+*.pem
 .env.local
 __pycache__/
 *.pyc

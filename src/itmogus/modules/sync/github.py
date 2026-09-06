@@ -82,7 +82,7 @@ async def run_sync(lab_name: str, progress: SyncProgress | None = None) -> tuple
 
     template_repo = get_template_repo_name(lab_name)
 
-    async with GitHubClient(config.github_token) as github:
+    async with GitHubClient() as github:
         repos = await fetch_forks(github, config.github_org, template_repo, progress)
         total = len(repos)
         if progress is not None:

@@ -14,6 +14,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from itmogus.core.config import config
+from itmogus.github.auth import GitHubAppAuth
 from itmogus.github.errors import (
     GitHubAPIError,
     GitHubConnectionError,
@@ -81,9 +83,23 @@ async def _rate_limit_delay(resp: ClientResponse) -> float | None:
     return None
 
 
+_default_auth: GitHubAppAuth | None = None
+
+
+def default_auth() -> GitHubAppAuth:
+    global _default_auth
+    if _default_auth is None:
+        _default_auth = GitHubAppAuth.from_key_file(
+            config.github_app_id,
+            config.github_app_private_key_path,
+            config.github_org,
+        )
+    return _default_auth
+
+
 class GitHubClient:
-    def __init__(self, token: str):
-        self._token = token
+    def __init__(self, auth: GitHubAppAuth | None = None):
+        self._auth = auth or default_auth()
         self._session: ClientSession | None = None
 
     async def _get_session(self) -> ClientSession:
@@ -92,7 +108,6 @@ class GitHubClient:
                 base_url=API_URL,
                 headers={
                     "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {self._token}",
                     "X-GitHub-Api-Version": "2022-11-28",
                 },
                 timeout=ClientTimeout(total=60),
@@ -118,8 +133,10 @@ class GitHubClient:
     )
     async def _send(self, method: str, path: str, **kwargs) -> ClientResponse:
         session = await self._get_session()
+        token = await self._auth.token(session)
+        headers = {**kwargs.pop("headers", {}), "Authorization": f"Bearer {token}"}
         try:
-            return await session.request(method, path, **kwargs)
+            return await session.request(method, path, headers=headers, **kwargs)
         except ClientError as e:
             logger.warning("GitHub network error: %s %s: %s", method, path, e)
             raise GitHubConnectionError() from e

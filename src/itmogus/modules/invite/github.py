@@ -178,7 +178,7 @@ async def run_rollout(
 ) -> InviteError | None:
     template_repo = get_template_repo_name(template_name)
 
-    async with GitHubClient(config.github_token) as github:
+    async with GitHubClient() as github:
         # Phase 0. Change visibility
         visibility = await get_repo_visibility(github, config.github_org, template_repo)
         if visibility is None:
@@ -265,7 +265,7 @@ async def ensure_invitation(
     repo = get_student_repo_name(template_name, github_username)
 
     try:
-        async with GitHubClient(config.github_token) as github:
+        async with GitHubClient() as github:
             visibility = await get_repo_visibility(github, config.github_org, repo)
 
             if visibility is None:

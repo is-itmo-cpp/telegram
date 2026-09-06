@@ -25,7 +25,8 @@ class Config(BaseSettings):
     owner_ids: OwnerIds = set()
     google_credentials_path: str = "credentials.json"
     users_table_id: str
-    github_token: str
+    github_app_id: int
+    github_app_private_key_path: str = "github-app.pem"
     github_org: str
     github_branch: str = "main"
     storage_dir: str = "state"
