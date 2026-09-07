@@ -229,7 +229,7 @@ class SheetsClient:
                 range=range_param,
                 json={"values": [values]},
                 insertDataOption="INSERT_ROWS",
-                valueInputOption="USER_ENTERED",
+                valueInputOption="RAW",
             )
         )
 
