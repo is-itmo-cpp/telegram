@@ -175,6 +175,7 @@ async def run_rollout(
     template_name: str,
     github_usernames: list[str],
     progress: RolloutProgress,
+    forks_only: bool = False,
 ) -> InviteError | None:
     template_repo = get_template_repo_name(template_name)
 
@@ -226,6 +227,9 @@ async def run_rollout(
                 logger.warning("Failed to fork template: %s -> %s", template_repo, repo)
             progress.completed += 1
             await asyncio.sleep(WRITE_INTERVAL)
+
+        if forks_only:
+            return None
 
         # Phase 3. Enable Actions & send invitations
         progress.phase = RolloutPhase.SENDING_INVITATIONS

@@ -30,6 +30,7 @@ router = Router()
 current_rollout: RolloutProgress | None = None
 
 ROLLOUT_CANCEL_TTL = 6 * 60 * 60
+FORKS_ONLY = "forks"
 
 
 @dataclass(frozen=True)
@@ -84,8 +85,13 @@ def _render_rollout_progress(lab_name: str, progress: RolloutProgress) -> str:
             ).strip()
 
 
-def _render_rollout_result(lab_name: str, progress: RolloutProgress, header: str = "✅ Rollout завершён") -> str:
-    return dedent(
+def _render_rollout_result(
+    lab_name: str,
+    progress: RolloutProgress,
+    header: str = "✅ Rollout завершён",
+    forks_only: bool = False,
+) -> str:
+    text = dedent(
         f"""\
         {header}
 
@@ -98,13 +104,20 @@ def _render_rollout_result(lab_name: str, progress: RolloutProgress, header: str
         🍴 Уже существовали: {progress.forks_existing}
         🆕 Форков создано: {progress.forks_created}
         ❌ Ошибки форков: {progress.fork_errors}
+        """
+    ).strip()
+    if forks_only:
+        return text
 
+    invitations = dedent(
+        f"""\
         📨 Приглашений отправлено: {progress.invitations_sent}
         ✅ Доступ уже был: {progress.already_accessible}
         ❌ Ошибки приглашений: {progress.invitation_errors}
         ⚙️ Ошибки включения Actions: {progress.actions_errors}
         """
     ).strip()
+    return f"{text}\n\n{invitations}"
 
 
 @router.message(Command("rollout"), HasRole(Role.TEAM), F.chat.type == "private")
@@ -133,6 +146,7 @@ async def cmd_rollout(message: Message, actions: PendingActions):
         inline_keyboard=[
             [
                 action_button("✅ Запустить", token, CONFIRM),
+                action_button("🍴 Создать форки", token, FORKS_ONLY),
                 action_button("❌ Отмена", token, CANCEL),
             ]
         ]
@@ -162,12 +176,13 @@ async def callback_rollout(
         await callback.answer()
         return
 
-    if choice != CONFIRM:
+    if choice not in (CONFIRM, FORKS_ONLY):
         await callback.message.edit_text("❌ Rollout отменён.")
         await callback.answer()
         return
 
     lab_name = payload.lab_name
+    forks_only = choice == FORKS_ONLY
 
     if current_rollout is not None:
         await callback.answer("Rollout уже выполняется. Дождитесь его завершения.", show_alert=True)
@@ -210,7 +225,7 @@ async def callback_rollout(
         try:
             error = await run_with_progress(
                 callback.message,
-                run_rollout(lab_name, github_usernames, progress),
+                run_rollout(lab_name, github_usernames, progress, forks_only=forks_only),
                 lambda: _render_rollout_progress(lab_name, progress),
                 parse_mode="Markdown",
                 reply_markup=cancel_keyboard,
@@ -227,12 +242,13 @@ async def callback_rollout(
                 await callback.message.edit_text("❌ Шаблон репозитория должен быть приватным.")
             case InviteError.CANCELLED:
                 await callback.message.edit_text(
-                    _render_rollout_result(lab_name, progress, header="⛔ Rollout остановлен"),
+                    _render_rollout_result(lab_name, progress, header="⛔ Rollout остановлен", forks_only=forks_only),
                     parse_mode="Markdown",
                 )
             case None:
+                header = "🍴 Форки созданы" if forks_only else "✅ Rollout завершён"
                 await callback.message.edit_text(
-                    _render_rollout_result(lab_name, progress),
+                    _render_rollout_result(lab_name, progress, header=header, forks_only=forks_only),
                     parse_mode="Markdown",
                 )
     finally:
