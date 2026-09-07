@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from itmogus.core.actions import CANCEL, CONFIRM, Action, PendingActions, action_button
+from itmogus.github import GitHubClient
 from itmogus.labs import resolve_lab_name
 from itmogus.modules.invite.errors import InviteError
 from itmogus.modules.invite.github import (
@@ -99,6 +100,7 @@ def _render_rollout_result(
         👥 Студентов: {progress.students}
         🐙 GitHub-аккаунтов: {progress.github_accounts}
         ⚠️ Без GitHub: {progress.missing_github}
+        ⚠️ Некорректные GitHub: {progress.invalid_github}
         ⚠️ Повторяющиеся GitHub: {progress.duplicate_github}
 
         🍴 Уже существовали: {progress.forks_existing}
@@ -204,18 +206,23 @@ async def callback_rollout(
         students = list((await users.get_all_students()).values())
         github_usernames_by_key: dict[str, str] = {}
         github_entries = 0
+        valid_github_entries = 0
         for student in students:
             username = student.github.strip()
             if not username:
                 continue
             github_entries += 1
+            if not GitHubClient.validate_username(username):
+                continue
+            valid_github_entries += 1
             github_usernames_by_key.setdefault(username.casefold(), username)
 
         github_usernames = list(github_usernames_by_key.values())
         progress.students = len(students)
         progress.github_accounts = len(github_usernames)
         progress.missing_github = len(students) - github_entries
-        progress.duplicate_github = github_entries - len(github_usernames)
+        progress.invalid_github = github_entries - valid_github_entries
+        progress.duplicate_github = valid_github_entries - len(github_usernames)
         await callback.message.edit_text(
             _render_rollout_progress(lab_name, progress),
             parse_mode="Markdown",
@@ -240,6 +247,8 @@ async def callback_rollout(
                 await callback.message.edit_text("❌ Шаблон репозитория не найден.")
             case InviteError.TEMPLATE_NOT_PRIVATE:
                 await callback.message.edit_text("❌ Шаблон репозитория должен быть приватным.")
+            case InviteError.INVALID_GITHUB_USERNAME:
+                await callback.message.edit_text("❌ Обнаружен некорректный GitHub-аккаунт.")
             case InviteError.CANCELLED:
                 await callback.message.edit_text(
                     _render_rollout_result(lab_name, progress, header="⛔ Rollout остановлен", forks_only=forks_only),
@@ -293,11 +302,12 @@ async def cmd_invite(message: Message, sheets: SheetsClient):
         await message.answer("❌ Вы не зарегистрированы. Используйте /register <ИСУ>")
         return
 
-    if not student.github:
+    github_username = student.github.strip()
+    if not github_username:
         await message.answer("❌ У вас не указан GitHub в профиле. Обратитесь к преподавателю.")
         return
 
-    result = await ensure_invitation(template_name, student.github)
+    result = await ensure_invitation(template_name, github_username)
 
     match result:
         case Ok(EnsureStatus.InvitationCreated(invitation)):
@@ -308,6 +318,8 @@ async def cmd_invite(message: Message, sheets: SheetsClient):
             await message.answer(f"✅ Вы уже имеете доступ к репозиторию: {url}.")
         case Fail(InviteError.REPO_NOT_FOUND):
             await message.answer("❌ Репозиторий для этой лабораторной ещё не создан. Обратитесь к преподавателю.")
+        case Fail(InviteError.INVALID_GITHUB_USERNAME):
+            await message.answer("❌ В профиле указан некорректный GitHub-аккаунт. Обратитесь к преподавателю.")
         case Fail(InviteError.GITHUB_ERROR):
             await message.answer("❌ Ошибка GitHub. Попробуйте позже.")
         case Fail(error):

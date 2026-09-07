@@ -68,6 +68,7 @@ class RolloutProgress:
     github_accounts: int = 0
     missing_github: int = 0
     duplicate_github: int = 0
+    invalid_github: int = 0
     total: int = 0
     completed: int = 0
     forks_found: int = 0
@@ -134,6 +135,9 @@ async def add_collaborator(
     username: str,
     permission: str = "write",
 ) -> Invitation | None:
+    if not github.validate_username(username):
+        raise ValueError("Invalid GitHub username")
+
     resp = await github.request(
         "PUT",
         f"/repos/{org}/{repo}/collaborators/{username}",
@@ -177,6 +181,10 @@ async def run_rollout(
     progress: RolloutProgress,
     forks_only: bool = False,
 ) -> InviteError | None:
+    github_usernames = [username.strip() for username in github_usernames]
+    if not all(GitHubClient.validate_username(username) for username in github_usernames):
+        return InviteError.INVALID_GITHUB_USERNAME
+
     template_repo = get_template_repo_name(template_name)
 
     async with GitHubClient() as github:
@@ -266,6 +274,10 @@ async def ensure_invitation(
     template_name: str,
     github_username: str,
 ) -> Result[EnsureResult, InviteError]:
+    github_username = github_username.strip()
+    if not GitHubClient.validate_username(github_username):
+        return Fail(InviteError.INVALID_GITHUB_USERNAME)
+
     repo = get_student_repo_name(template_name, github_username)
 
     try:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, Self
@@ -37,6 +38,7 @@ MAX_RATE_LIMIT_WAIT = 30 * 60
 DEFAULT_RATE_LIMIT_WAIT = 60
 RATE_LIMIT_STATUSES = (403, 422, 429)
 RATE_LIMIT_PHRASES = ("rate limit", "too quickly", "abuse")
+GITHUB_USERNAME_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
 
 
 async def _error_message(resp: ClientResponse) -> str:
@@ -98,6 +100,10 @@ def default_auth() -> GitHubAppAuth:
 
 
 class GitHubClient:
+    @staticmethod
+    def validate_username(username: str) -> bool:
+        return GITHUB_USERNAME_RE.fullmatch(username) is not None
+
     def __init__(self, auth: GitHubAppAuth | None = None):
         self._auth = auth or default_auth()
         self._session: ClientSession | None = None
