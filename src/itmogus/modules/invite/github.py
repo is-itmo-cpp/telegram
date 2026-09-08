@@ -5,6 +5,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Self
 
+from cachetools import TTLCache
+
 from itmogus.core.config import config
 from itmogus.github import GitHubClient, GitHubError, GitHubNotFoundError
 from itmogus.labs import get_student_repo_name, get_template_repo_name
@@ -16,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 # https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api?apiVersion=2026-03-10#pause-between-mutative-requests
 WRITE_INTERVAL = 1.0
+
+INVITED_TTL = 13 * 24 * 60 * 60  # Invitations expire in 14 days, use 13 because it's a luckier number.
+invited_repos: TTLCache[str, bool] = TTLCache(maxsize=10_000, ttl=INVITED_TTL)
 
 
 @dataclass
@@ -248,6 +253,12 @@ async def run_rollout(
             if progress.cancel_requested:
                 return InviteError.CANCELLED
             repo = get_student_repo_name(template_name, username)
+
+            if repo.casefold() in invited_repos:
+                progress.already_accessible += 1
+                progress.completed += 1
+                continue
+
             try:
                 await enable_actions(github, config.github_org, repo)
             except GitHubError:
@@ -261,6 +272,7 @@ async def run_rollout(
                     progress.already_accessible += 1
                 else:
                     progress.invitations_sent += 1
+                invited_repos[repo.casefold()] = True
             except GitHubError:
                 progress.invitation_errors += 1
                 logger.warning("Failed to invite %s to %s", username, repo)
@@ -270,6 +282,7 @@ async def run_rollout(
     return None
 
 
+# Don't use invite cache just to be sure.
 async def ensure_invitation(
     template_name: str,
     github_username: str,
