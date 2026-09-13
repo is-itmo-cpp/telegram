@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api?apiVersion=2026-03-10#pause-between-mutative-requests
 WRITE_INTERVAL = 1.0
 
-INVITED_TTL = 13 * 24 * 60 * 60  # Invitations expire in 14 days, use 13 because it's a luckier number.
+INVITED_TTL = 6 * 24 * 60 * 60  # Invitations expire in 7 days, use 6 for no reason whatsoever.
 invited_repos: TTLCache[str, bool] = TTLCache(maxsize=10_000, ttl=INVITED_TTL)
 
 
