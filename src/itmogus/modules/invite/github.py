@@ -264,7 +264,6 @@ async def run_rollout(
             except GitHubError:
                 progress.actions_errors += 1
                 logger.warning("Failed to enable Actions on %s", repo)
-            await asyncio.sleep(WRITE_INTERVAL)
 
             try:
                 invitation = await add_collaborator(github, config.github_org, repo, username)
@@ -277,7 +276,6 @@ async def run_rollout(
                 progress.invitation_errors += 1
                 logger.warning("Failed to invite %s to %s", username, repo)
             progress.completed += 1
-            await asyncio.sleep(WRITE_INTERVAL)
 
     return None
 
