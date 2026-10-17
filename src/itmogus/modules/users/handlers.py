@@ -57,6 +57,7 @@ async def cmd_start(message: Message, sheets: SheetsClient):
     commands = [
         "📝 /register <ИСУ> — регистрация",
         "📧 /invite <lab> — получение доступа к репозиторию",
+        "📋 /queue — место в очереди на ревью",
     ]
 
     if role in (Role.TEAM, Role.OWNER):
@@ -72,6 +73,7 @@ async def cmd_start(message: Message, sheets: SheetsClient):
         commands.append("📌 /exam_tasks <url> — настроить таблицу билетов")
         commands.append("📝 /exam_logs <url> — настроить таблицу сдачи")
         commands.append("🧹 /exam_end — завершить экзамен")
+        commands.append("🗂 /queue_sheet <url> — настроить таблицу очереди на ревью")
 
     await message.answer("Доступные команды:\n\n" + "\n".join(commands))
 
