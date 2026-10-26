@@ -33,7 +33,6 @@ MAX_RETRIES = 3
 PAGE_SIZE = 100
 
 # https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api?apiVersion=2026-03-10#handle-rate-limit-errors-appropriately
-MAX_RATE_LIMIT_RETRIES = 5
 MAX_RATE_LIMIT_WAIT = 30 * 60
 DEFAULT_RATE_LIMIT_WAIT = 60
 RATE_LIMIT_STATUSES = (403, 422, 429)
@@ -148,21 +147,29 @@ class GitHubClient:
             raise GitHubConnectionError() from e
 
     async def request(self, method: str, path: str, **kwargs) -> ClientResponse:
-        for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+        deadline = time.monotonic() + MAX_RATE_LIMIT_WAIT
+        while True:
             resp = await self._send(method, path, **kwargs)
 
             delay = await _rate_limit_delay(resp)
             if delay is None:
                 return await self._check(resp, method, path)
 
-            if attempt == MAX_RATE_LIMIT_RETRIES or delay > MAX_RATE_LIMIT_WAIT:
+            if time.monotonic() + delay > deadline:
                 logger.error("GitHub rate limit exceeded: %s %s (would wait %.0fs)", method, path, delay)
                 raise GitHubRateLimitError()
 
-            logger.warning("GitHub rate limit hit: %s %s, retrying in %.0fs", method, path, delay)
+            resp.release()
+            logger.warning(
+                "GitHub rate limit hit: %s %s -> %d, retrying in %.0fs (retry-after: %s, remaining: %s)",
+                method,
+                path,
+                resp.status,
+                delay,
+                resp.headers.get("retry-after"),
+                resp.headers.get("x-ratelimit-remaining"),
+            )
             await asyncio.sleep(delay)
-
-        raise GitHubRateLimitError()
 
     async def _check(self, resp: ClientResponse, method: str, path: str) -> ClientResponse:
         if resp.status < 400:
